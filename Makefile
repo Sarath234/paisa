@@ -51,6 +51,11 @@ test: jsbuild jstest
 windows:
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CXX=x86_64-w64-mingw32-g++ CC=x86_64-w64-mingw32-gcc go build
 
+linux-arm64-docker:
+	docker buildx build --platform linux/arm64 \
+		--output "type=local,dest=build/linux-arm64" \
+		--target binary-export .
+
 
 deploy:
 	fly scale count 2 --region lax --yes

@@ -20,3 +20,6 @@ WORKDIR /root/
 COPY --from=go /usr/src/paisa/paisa /usr/bin
 EXPOSE 7500
 CMD ["paisa", "serve"]
+
+FROM scratch AS binary-export
+COPY --from=go /usr/src/paisa/paisa /paisa
