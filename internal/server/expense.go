@@ -129,25 +129,91 @@ func computeHierarchyGraph(postings []posting.Posting) Graph {
 
 }
 
+// segNodeKey returns a node key in "RootType:Depth:SegmentName" format,
+// e.g. "Income:2:Salary", "Expenses:3:Chennai", "Assets:1:Assets".
+func segNodeKey(rootType string, depth int, segName string) string {
+	return fmt.Sprintf("%s:%d:%s", rootType, depth, segName)
+}
+
+func ensureSegNode(nodeID *uint, nodes *map[string]Node, key string) {
+	if _, ok := (*nodes)[key]; !ok {
+		(*nodeID)++
+		(*nodes)[key] = Node{ID: *nodeID, Name: key}
+	}
+}
+
+func addSegLink(nodes *map[string]Node, links *map[Pair]decimal.Decimal, srcKey, tgtKey string, amount decimal.Decimal) {
+	p := Pair{Source: (*nodes)[srcKey].ID, Target: (*nodes)[tgtKey].ID}
+	(*links)[p] = (*links)[p].Add(amount)
+}
+
+func addSegmentedAccountLinks(nodeID *uint, nodes *map[string]Node, links *map[Pair]decimal.Decimal, account string, amount decimal.Decimal, flowUp bool) {
+	parts := strings.Split(account, ":")
+	root := parts[0]
+	for i, part := range parts {
+		ensureSegNode(nodeID, nodes, segNodeKey(root, i+1, part))
+	}
+	if flowUp {
+		// leaf → root (Income source)
+		for i := len(parts) - 1; i > 0; i-- {
+			addSegLink(nodes, links, segNodeKey(root, i+1, parts[i]), segNodeKey(root, i, parts[i-1]), amount)
+		}
+	} else {
+		// root → leaf (Expenses target)
+		for i := 0; i < len(parts)-1; i++ {
+			addSegLink(nodes, links, segNodeKey(root, i+1, parts[i]), segNodeKey(root, i+2, parts[i+1]), amount)
+		}
+	}
+}
+
+func addSegmentedLink(source, target string, amount decimal.Decimal, nodeID *uint, nodes *map[string]Node, links *map[Pair]decimal.Decimal) {
+	sroot := strings.Split(source, ":")[0]
+	troot := strings.Split(target, ":")[0]
+
+	srcRootKey := segNodeKey(sroot, 1, sroot)
+	tgtRootKey := segNodeKey(troot, 1, troot)
+
+	if sroot == "Income" {
+		addSegmentedAccountLinks(nodeID, nodes, links, source, amount, true)
+	} else {
+		ensureSegNode(nodeID, nodes, srcRootKey)
+	}
+
+	if troot == "Expenses" {
+		addSegmentedAccountLinks(nodeID, nodes, links, target, amount, false)
+	} else {
+		ensureSegNode(nodeID, nodes, tgtRootKey)
+	}
+
+	if srcRootKey != tgtRootKey {
+		addSegLink(nodes, links, srcRootKey, tgtRootKey, amount)
+	}
+}
+
 func computeSegmentedGraph(postings []posting.Posting) Graph {
 	nodes := make(map[string]Node)
 	links := make(map[Pair]decimal.Decimal)
 	var nodeID uint = 0
 
-	for _, p := range postings {
-		parts := strings.Split(p.Account, ":")
-		for i, part := range parts {
-			key := fmt.Sprintf("%d:%s", i+1, part)
-			if _, ok := nodes[key]; !ok {
-				nodeID++
-				nodes[key] = Node{ID: nodeID, Name: key}
+	transactions := transaction.Build(postings)
+
+	for _, t := range transactions {
+		from := lo.Filter(t.Postings, func(p posting.Posting, _ int) bool { return p.Amount.LessThan(decimal.Zero) })
+		to := lo.Filter(t.Postings, func(p posting.Posting, _ int) bool { return p.Amount.GreaterThan(decimal.Zero) })
+
+		for _, f := range from {
+			for f.Amount.Abs().GreaterThan(decimal.NewFromFloat(0.1)) && len(to) > 0 {
+				top := to[0]
+				if top.Amount.GreaterThan(f.Amount.Neg()) {
+					addSegmentedLink(f.Account, top.Account, f.Amount.Neg(), &nodeID, &nodes, &links)
+					top.Amount = top.Amount.Sub(f.Amount.Neg())
+					f.Amount = decimal.Zero
+				} else {
+					addSegmentedLink(f.Account, top.Account, top.Amount, &nodeID, &nodes, &links)
+					f.Amount = f.Amount.Add(top.Amount)
+					to = to[1:]
+				}
 			}
-		}
-		for i := 0; i < len(parts)-1; i++ {
-			srcKey := fmt.Sprintf("%d:%s", i+1, parts[i])
-			tgtKey := fmt.Sprintf("%d:%s", i+2, parts[i+1])
-			pair := Pair{Source: nodes[srcKey].ID, Target: nodes[tgtKey].ID}
-			links[pair] = links[pair].Add(p.Amount.Abs())
 		}
 	}
 

@@ -409,6 +409,17 @@ export function renderFlow(graph: Graph) {
   return legends;
 }
 
+// Node name format: "RootType:Depth:SegmentName" e.g. "Income:2:Salary", "Expenses:3:Chennai"
+function segRoot(nodeName: string) {
+  return nodeName.split(":")[0]; // "Income" | "Expenses" | "Assets" | ...
+}
+function segDepth(nodeName: string) {
+  return parseInt(nodeName.split(":")[1], 10);
+}
+function segLabel(nodeName: string) {
+  return nodeName.split(":")[2]; // "Salary", "Food", "Assets", ...
+}
+
 export function renderSegmentedFlow(graph: Graph, svgId: string) {
   const id = `#${svgId}`;
   const svg = d3.select(id);
@@ -426,28 +437,13 @@ export function renderSegmentedFlow(graph: Graph, svgId: string) {
     return;
   }
 
-  // Extract the display label from "depth:name" format
-  const segmentLabel = (nodeName: string) => nodeName.split(":").slice(1).join(":");
-
-  // Extract the depth number from "depth:name" format
-  const segmentDepth = (nodeName: string) => parseInt(nodeName.split(":")[0], 10);
-
-  // Color by depth level
-  const maxDepth =
-    _.chain(graph.nodes)
-      .map((n) => segmentDepth(n.name))
-      .max()
-      .value() || 1;
-  const depthColors = d3.schemeTableau10;
-  const color = (depth: number) => depthColors[(depth - 1) % depthColors.length];
-
-  // Unique level-1 node labels for the legend
-  const level1Nodes = _.chain(graph.nodes)
-    .filter((n) => segmentDepth(n.name) === 1)
-    .map((n) => segmentLabel(n.name))
+  // Color by root account type (Income, Expenses, Assets, ...)
+  const rootTypes = _.chain(graph.nodes)
+    .map((n) => segRoot(n.name))
     .uniq()
     .sort()
     .value();
+  const color = generateColorScheme(rootTypes);
 
   const g = svg
     .attr("width", width + margin.left + margin.right)
@@ -490,10 +486,10 @@ export function renderSegmentedFlow(graph: Graph, svgId: string) {
     .attr("y", (d: any) => d.y0)
     .attr("height", (d: any) => d.y1 - d.y0)
     .attr("width", (d: any) => d.x1 - d.x0)
-    .style("fill", (d: any) => color(segmentDepth(d.name)))
+    .style("fill", (d: any) => color(segRoot(d.name)))
     .attr("data-tippy-content", (d: any) =>
       tooltip([
-        ["Account", segmentLabel(d.name)],
+        ["Account", iconify(segLabel(d.name))],
         ["Total", [formatCurrency(d.value), "has-text-right has-text-weight-bold"]]
       ])
     );
@@ -503,26 +499,18 @@ export function renderSegmentedFlow(graph: Graph, svgId: string) {
     .attr("x", (d: any) => (d.x0 + d.x1) / 2)
     .attr("y", (d: any) => d.y0 - 12)
     .attr("dx", (d: any) => {
-      if (_.isEmpty(d.sourceLinks)) {
-        return "10px";
-      }
-      if (_.isEmpty(d.targetLinks)) {
-        return "-10px";
-      }
+      if (_.isEmpty(d.sourceLinks)) return "10px";
+      if (_.isEmpty(d.targetLinks)) return "-10px";
       return "0px";
     })
     .attr("dy", "0.35em")
     .attr("text-anchor", (d: any) => {
-      if (_.isEmpty(d.sourceLinks)) {
-        return "end";
-      }
-      if (_.isEmpty(d.targetLinks)) {
-        return "start";
-      }
+      if (_.isEmpty(d.sourceLinks)) return "end";
+      if (_.isEmpty(d.targetLinks)) return "start";
       return "middle";
     })
     .classed("svg-text-grey-dark", true)
-    .text((d: any) => `${segmentLabel(d.name)} ${formatCurrencyCrude(d.value)}`);
+    .text((d: any) => `${segLabel(d.name)} ${formatCurrencyCrude(d.value)}`);
 
   const link = linkG.data(sankeyLinks).enter().append("g");
 
@@ -532,11 +520,11 @@ export function renderSegmentedFlow(graph: Graph, svgId: string) {
     .attr("d", (link: any) => link.path)
     .style("stroke-width", (d: any) => Math.max(1, d.width))
     .style("opacity", 0.5)
-    .style("stroke", (d: any) => color(segmentDepth(d.target.name)))
+    .style("stroke", (d: any) => color(segRoot(d.target.name)))
     .attr("data-tippy-content", (d: any) =>
       tooltip([
-        ["Source", segmentLabel(d.source.name)],
-        ["Target", segmentLabel(d.target.name)],
+        ["Source", iconify(segLabel(d.source.name))],
+        ["Target", iconify(segLabel(d.target.name))],
         ["Total", [formatCurrency(d.value), "has-text-right has-text-weight-bold"]]
       ])
     );
@@ -549,23 +537,19 @@ export function renderSegmentedFlow(graph: Graph, svgId: string) {
 
   linkG.data(sankeyLinks).enter().append("g").attr("class", "g-arrow").call(arrows);
 
-  const legends: Legend[] = [];
-  for (let d = 1; d <= maxDepth; d++) {
-    const label =
-      d === 1
-        ? level1Nodes.join(", ")
-        : _.chain(graph.nodes)
-            .filter((n) => segmentDepth(n.name) === d)
-            .map((n) => segmentLabel(n.name))
-            .uniq()
-            .sort()
-            .take(4)
-            .value()
-            .join(", ");
-    legends.push({ label: `Level ${d}: ${label}`, color: color(d), shape: "square" as const });
-  }
-
+  const legends: Legend[] = _.map(rootTypes, (k) => ({
+    label: k,
+    color: color(k),
+    shape: "square" as const
+  }));
   return legends;
+}
+
+export function segmentedNodeDepth(nodeName: string) {
+  return segDepth(nodeName);
+}
+export function segmentedNodeRoot(nodeName: string) {
+  return segRoot(nodeName);
 }
 
 function name(node: Node) {
