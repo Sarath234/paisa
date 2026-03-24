@@ -433,10 +433,11 @@ export function renderSegmentedFlow(graph: Graph, svgId: string) {
   const segmentDepth = (nodeName: string) => parseInt(nodeName.split(":")[0], 10);
 
   // Color by depth level
-  const maxDepth = _.chain(graph.nodes)
-    .map((n) => segmentDepth(n.name))
-    .max()
-    .value() || 1;
+  const maxDepth =
+    _.chain(graph.nodes)
+      .map((n) => segmentDepth(n.name))
+      .max()
+      .value() || 1;
   const depthColors = d3.schemeTableau10;
   const color = (depth: number) => depthColors[(depth - 1) % depthColors.length];
 
