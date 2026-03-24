@@ -1,17 +1,17 @@
 {
-    "expenses": [],
-    "graph": {},
-    "month_wise": {
-        "expenses": {},
-        "incomes": {},
-        "investments": {},
-        "taxes": {}
-    },
-    "segmented_graph": {},
-    "year_wise": {
-        "expenses": {},
-        "incomes": {},
-        "investments": {},
-        "taxes": {}
-    }
+  "expenses": [],
+  "graph": {},
+  "month_wise": {
+    "expenses": {},
+    "incomes": {},
+    "investments": {},
+    "taxes": {}
+  },
+  "segmented_graph": {},
+  "year_wise": {
+    "expenses": {},
+    "incomes": {},
+    "investments": {},
+    "taxes": {}
+  }
 }

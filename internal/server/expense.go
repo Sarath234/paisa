@@ -77,18 +77,35 @@ func GetExpense(db *gorm.DB) gin.H {
 func sortGraph(graph Graph) Graph {
 	nodes := graph.Nodes
 	sort.Slice(nodes, func(i, j int) bool {
-		return graph.Nodes[i].Name < graph.Nodes[j].Name
+		return nodes[i].Name < nodes[j].Name
 	})
 
+	// Reassign IDs based on sorted position to make them deterministic
+	// across runs (Go map iteration order is random).
+	oldToNew := make(map[uint]uint, len(nodes))
+	for i, n := range nodes {
+		newID := uint(i + 1)
+		oldToNew[n.ID] = newID
+		nodes[i].ID = newID
+	}
+
 	links := graph.Links
+	for i := range links {
+		links[i].Source = oldToNew[links[i].Source]
+		links[i].Target = oldToNew[links[i].Target]
+	}
+
 	sort.Slice(links, func(i, j int) bool {
-		return graph.Links[i].Source < graph.Links[j].Source || (graph.Links[i].Source == graph.Links[j].Source && graph.Links[i].Target < graph.Links[j].Target)
+		if links[i].Source != links[j].Source {
+			return links[i].Source < links[j].Source
+		}
+		return links[i].Target < links[j].Target
 	})
+
 	return Graph{
 		Nodes: nodes,
 		Links: links,
 	}
-
 }
 
 func computeHierarchyGraph(postings []posting.Posting) Graph {
