@@ -409,6 +409,164 @@ export function renderFlow(graph: Graph) {
   return legends;
 }
 
+export function renderSegmentedFlow(graph: Graph, svgId: string) {
+  const id = `#${svgId}`;
+  const svg = d3.select(id);
+  const margin = { top: rem(60), right: rem(20), bottom: rem(40), left: rem(20) },
+    width =
+      Math.max(document.getElementById(svgId).parentElement.clientWidth, 1000) -
+      margin.left -
+      margin.right,
+    height = +svg.attr("height") - margin.top - margin.bottom;
+
+  willClearTippy.update((n) => n + 1);
+  svg.selectAll("*").remove();
+
+  if (graph == null) {
+    return;
+  }
+
+  // Extract the display label from "depth:name" format
+  const segmentLabel = (nodeName: string) => nodeName.split(":").slice(1).join(":");
+
+  // Extract the depth number from "depth:name" format
+  const segmentDepth = (nodeName: string) => parseInt(nodeName.split(":")[0], 10);
+
+  // Color by depth level
+  const maxDepth = _.chain(graph.nodes)
+    .map((n) => segmentDepth(n.name))
+    .max()
+    .value() || 1;
+  const depthColors = d3.schemeTableau10;
+  const color = (depth: number) => depthColors[(depth - 1) % depthColors.length];
+
+  // Unique level-1 node labels for the legend
+  const level1Nodes = _.chain(graph.nodes)
+    .filter((n) => segmentDepth(n.name) === 1)
+    .map((n) => segmentLabel(n.name))
+    .uniq()
+    .sort()
+    .value();
+
+  const g = svg
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+  const sankey = sankeyCircular()
+    .nodeWidth(rem(20))
+    .nodePaddingRatio(0.7)
+    .size([width, height])
+    .nodeId((d: Node) => d.id)
+    .nodeAlign(sankeyJustify)
+    .iterations(64)
+    .circularLinkGap(2);
+
+  const linkG = g
+    .append("g")
+    .attr("class", "links")
+    .attr("fill", "none")
+    .attr("stroke-opacity", 0.2)
+    .selectAll("path");
+
+  const nodeG = g
+    .append("g")
+    .attr("class", "nodes")
+    .attr("font-family", "sans-serif")
+    .attr("font-size", "0.754rem")
+    .selectAll("g");
+
+  const sankeyData = sankey(graph);
+  const sankeyNodes = sankeyData.nodes;
+  const sankeyLinks = sankeyData.links;
+
+  const node = nodeG.data(sankeyNodes).enter().append("g");
+
+  node
+    .append("rect")
+    .attr("x", (d: any) => d.x0)
+    .attr("y", (d: any) => d.y0)
+    .attr("height", (d: any) => d.y1 - d.y0)
+    .attr("width", (d: any) => d.x1 - d.x0)
+    .style("fill", (d: any) => color(segmentDepth(d.name)))
+    .attr("data-tippy-content", (d: any) =>
+      tooltip([
+        ["Account", segmentLabel(d.name)],
+        ["Total", [formatCurrency(d.value), "has-text-right has-text-weight-bold"]]
+      ])
+    );
+
+  node
+    .append("text")
+    .attr("x", (d: any) => (d.x0 + d.x1) / 2)
+    .attr("y", (d: any) => d.y0 - 12)
+    .attr("dx", (d: any) => {
+      if (_.isEmpty(d.sourceLinks)) {
+        return "10px";
+      }
+      if (_.isEmpty(d.targetLinks)) {
+        return "-10px";
+      }
+      return "0px";
+    })
+    .attr("dy", "0.35em")
+    .attr("text-anchor", (d: any) => {
+      if (_.isEmpty(d.sourceLinks)) {
+        return "end";
+      }
+      if (_.isEmpty(d.targetLinks)) {
+        return "start";
+      }
+      return "middle";
+    })
+    .classed("svg-text-grey-dark", true)
+    .text((d: any) => `${segmentLabel(d.name)} ${formatCurrencyCrude(d.value)}`);
+
+  const link = linkG.data(sankeyLinks).enter().append("g");
+
+  link
+    .append("path")
+    .attr("class", "sankey-link")
+    .attr("d", (link: any) => link.path)
+    .style("stroke-width", (d: any) => Math.max(1, d.width))
+    .style("opacity", 0.5)
+    .style("stroke", (d: any) => color(segmentDepth(d.target.name)))
+    .attr("data-tippy-content", (d: any) =>
+      tooltip([
+        ["Source", segmentLabel(d.source.name)],
+        ["Target", segmentLabel(d.target.name)],
+        ["Total", [formatCurrency(d.value), "has-text-right has-text-weight-bold"]]
+      ])
+    );
+
+  const arrows = pathArrows()
+    .arrowLength(10)
+    .gapLength(150)
+    .arrowHeadSize(3)
+    .path((link: any) => link.path);
+
+  linkG.data(sankeyLinks).enter().append("g").attr("class", "g-arrow").call(arrows);
+
+  const legends: Legend[] = [];
+  for (let d = 1; d <= maxDepth; d++) {
+    const label =
+      d === 1
+        ? level1Nodes.join(", ")
+        : _.chain(graph.nodes)
+            .filter((n) => segmentDepth(n.name) === d)
+            .map((n) => segmentLabel(n.name))
+            .uniq()
+            .sort()
+            .take(4)
+            .value()
+            .join(", ");
+    legends.push({ label: `Level ${d}: ${label}`, color: color(d), shape: "square" as const });
+  }
+
+  return legends;
+}
+
 function name(node: Node) {
   let name: string, group: string;
   if (node.name.startsWith("Income") || node.name.startsWith("Expenses")) {

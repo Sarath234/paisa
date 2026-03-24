@@ -62,6 +62,7 @@
           financialYearPicker: true,
           maxDepthSelector: true
         },
+        { label: "Segmented", href: "/segmented", financialYearPicker: true },
         {
           label: "Recurring",
           href: "/recurring",

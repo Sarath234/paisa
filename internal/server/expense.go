@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -52,6 +53,11 @@ func GetExpense(db *gorm.DB) gin.H {
 		graph[fy] = sortGraph(computeHierarchyGraph(ps))
 	}
 
+	segmentedGraph := make(map[string]Graph)
+	for fy, ps := range utils.GroupByFY(postings) {
+		segmentedGraph[fy] = sortGraph(computeSegmentedGraph(ps))
+	}
+
 	return gin.H{
 		"expenses": expenses,
 		"month_wise": gin.H{
@@ -64,7 +70,8 @@ func GetExpense(db *gorm.DB) gin.H {
 			"incomes":     utils.GroupByFY(incomes),
 			"investments": utils.GroupByFY(investments),
 			"taxes":       utils.GroupByFY(taxes)},
-		"graph": graph}
+		"graph":           graph,
+		"segmented_graph": segmentedGraph}
 }
 
 func sortGraph(graph Graph) Graph {
@@ -120,6 +127,36 @@ func computeHierarchyGraph(postings []posting.Posting) Graph {
 		return Link{Source: k.Source, Target: k.Target, Value: links[k]}
 	})}
 
+}
+
+func computeSegmentedGraph(postings []posting.Posting) Graph {
+	nodes := make(map[string]Node)
+	links := make(map[Pair]decimal.Decimal)
+	var nodeID uint = 0
+
+	for _, p := range postings {
+		parts := strings.Split(p.Account, ":")
+		for i, part := range parts {
+			key := fmt.Sprintf("%d:%s", i+1, part)
+			if _, ok := nodes[key]; !ok {
+				nodeID++
+				nodes[key] = Node{ID: nodeID, Name: key}
+			}
+		}
+		for i := 0; i < len(parts)-1; i++ {
+			srcKey := fmt.Sprintf("%d:%s", i+1, parts[i])
+			tgtKey := fmt.Sprintf("%d:%s", i+2, parts[i+1])
+			pair := Pair{Source: nodes[srcKey].ID, Target: nodes[tgtKey].ID}
+			links[pair] = links[pair].Add(p.Amount.Abs())
+		}
+	}
+
+	return Graph{
+		Nodes: lo.Values(nodes),
+		Links: lo.Map(lo.Keys(links), func(k Pair, _ int) Link {
+			return Link{Source: k.Source, Target: k.Target, Value: links[k]}
+		}),
+	}
 }
 
 func addNode(nodeID *uint, nodes *map[string]Node, account string) {
