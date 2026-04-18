@@ -78,7 +78,7 @@ func computeCashFlow(db *gorm.DB, q *query.Query, balance decimal.Decimal) []Cas
 	checkings := utils.GroupByMonth(checkingList)
 
 	end := utils.MaxTime(utils.EndOfToday(), all[len(all)-1].Date)
-	for start := utils.BeginningOfMonth(postings[0].Date); start.Before(end); start = start.AddDate(0, 1, 0) {
+	for start := utils.BeginningOfMonth(all[0].Date); start.Before(end); start = start.AddDate(0, 1, 0) {
 		cashFlow := CashFlow{Date: start}
 
 		key := start.Format("2006-01")
