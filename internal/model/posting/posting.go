@@ -26,10 +26,10 @@ const (
 type Posting struct {
 	ID                   uint            `gorm:"primaryKey" json:"id"`
 	TransactionID        string          `json:"transaction_id"`
-	Date                 time.Time       `json:"date"`
+	Date                 time.Time       `gorm:"index" json:"date"`
 	Payee                string          `json:"payee"`
-	Account              string          `json:"account"`
-	Commodity            string          `json:"commodity"`
+	Account              string          `gorm:"index" json:"account"`
+	Commodity            string          `gorm:"index" json:"commodity"`
 	Quantity             decimal.Decimal `json:"quantity"`
 	Amount               decimal.Decimal `json:"amount"`
 	Status               string          `json:"status"`

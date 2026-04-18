@@ -1,9 +1,11 @@
 package server
 
 import (
+	"strings"
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/accounting"
+	"github.com/ananthakumaran/paisa/internal/model/posting"
 	"github.com/ananthakumaran/paisa/internal/query"
 	"github.com/ananthakumaran/paisa/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -35,22 +37,47 @@ func GetCurrentCashFlow(db *gorm.DB) []CashFlow {
 	return computeCashFlow(db, query.Init(db).LastNMonths(3), balance)
 }
 
+// accountPrefixMatch returns true if account equals prefix or starts with "prefix:".
+func accountPrefixMatch(account, prefix string) bool {
+	return account == prefix || strings.HasPrefix(account, prefix+":")
+}
+
 func computeCashFlow(db *gorm.DB, q *query.Query, balance decimal.Decimal) []CashFlow {
 	var cashFlows []CashFlow
 
-	expenses := utils.GroupByMonth(q.Clone().Like("Expenses:%").NotAccountPrefix("Expenses:Tax").All())
-	incomes := utils.GroupByMonth(q.Clone().Like("Income:%").All())
-	liabilities := utils.GroupByMonth(q.Clone().Like("Liabilities:%").All())
-	investments := utils.GroupByMonth(q.Clone().Like("Assets:%").NotAccountPrefix("Assets:Checking").All())
-	taxes := utils.GroupByMonth(q.Clone().AccountPrefix("Expenses:Tax").All())
-	checkings := utils.GroupByMonth(q.Clone().AccountPrefix("Assets:Checking").All())
-	postings := q.Clone().All()
-
-	if len(postings) == 0 {
+	// Single DB query; all per-category filtering is done in-memory.
+	all := q.Clone().All()
+	if len(all) == 0 {
 		return []CashFlow{}
 	}
 
-	end := utils.MaxTime(utils.EndOfToday(), postings[len(postings)-1].Date)
+	var expenseList, incomeList, liabilityList, investmentList, taxList, checkingList []posting.Posting
+	for _, p := range all {
+		a := p.Account
+		switch {
+		case accountPrefixMatch(a, "Expenses:Tax"):
+			taxList = append(taxList, p)
+		case strings.HasPrefix(a, "Expenses:"):
+			expenseList = append(expenseList, p)
+		case strings.HasPrefix(a, "Income:"):
+			incomeList = append(incomeList, p)
+		case strings.HasPrefix(a, "Liabilities:"):
+			liabilityList = append(liabilityList, p)
+		case accountPrefixMatch(a, "Assets:Checking"):
+			checkingList = append(checkingList, p)
+		case strings.HasPrefix(a, "Assets:"):
+			investmentList = append(investmentList, p)
+		}
+	}
+
+	expenses := utils.GroupByMonth(expenseList)
+	incomes := utils.GroupByMonth(incomeList)
+	liabilities := utils.GroupByMonth(liabilityList)
+	investments := utils.GroupByMonth(investmentList)
+	taxes := utils.GroupByMonth(taxList)
+	checkings := utils.GroupByMonth(checkingList)
+
+	end := utils.MaxTime(utils.EndOfToday(), all[len(all)-1].Date)
 	for start := utils.BeginningOfMonth(postings[0].Date); start.Before(end); start = start.AddDate(0, 1, 0) {
 		cashFlow := CashFlow{Date: start}
 

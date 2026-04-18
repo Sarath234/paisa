@@ -95,7 +95,7 @@
               {/each}
             </select>
           </div>
-          <div class="help">{@html selectedProvider.description}</div>
+          <div class="help">{selectedProvider.description}</div>
         </div>
       </div>
       <div class="field">
@@ -138,7 +138,7 @@
                   ></Select>
                 {/key}
               {/if}
-              <p class="help">{@html field.help}</p>
+              <p class="help">{field.help}</p>
             </div>
           </div>
         {/each}

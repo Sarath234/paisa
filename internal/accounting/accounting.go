@@ -75,22 +75,23 @@ func FilterByGlob(postings []posting.Posting, accounts []string) []posting.Posti
 }
 
 func FIFO(postings []posting.Posting) []posting.Posting {
-	var available []posting.Posting
+	available := make([]posting.Posting, 0, len(postings))
+	head := 0 // index of oldest unconsumed lot; avoids O(n²) slice re-allocation
 	for _, p := range postings {
 		if utils.IsCurrency(p.Commodity) {
 			if p.Amount.GreaterThan(decimal.Zero) {
 				available = append(available, p)
 			} else {
 				amount := p.Amount.Neg()
-				for amount.GreaterThan(decimal.Zero) && len(available) > 0 {
-					first := available[0]
+				for amount.GreaterThan(decimal.Zero) && head < len(available) {
+					first := available[head]
 					if first.Amount.GreaterThan(amount) {
 						first.AddAmount(amount.Neg())
-						available[0] = first
+						available[head] = first
 						amount = decimal.Zero
 					} else {
 						amount = amount.Sub(first.Amount)
-						available = available[1:]
+						head++
 					}
 				}
 			}
@@ -99,22 +100,22 @@ func FIFO(postings []posting.Posting) []posting.Posting {
 				available = append(available, p)
 			} else {
 				quantity := p.Quantity.Neg()
-				for quantity.GreaterThan(decimal.Zero) && len(available) > 0 {
-					first := available[0]
+				for quantity.GreaterThan(decimal.Zero) && head < len(available) {
+					first := available[head]
 					if first.Quantity.GreaterThan(quantity) {
 						first.AddQuantity(quantity.Neg())
-						available[0] = first
+						available[head] = first
 						quantity = decimal.Zero
 					} else {
 						quantity = quantity.Sub(first.Quantity)
-						available = available[1:]
+						head++
 					}
 				}
 			}
 		}
 	}
 
-	return available
+	return available[head:]
 }
 
 func CostBalance(postings []posting.Posting) decimal.Decimal {

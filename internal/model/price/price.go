@@ -13,10 +13,10 @@ import (
 
 type Price struct {
 	ID            uint                 `gorm:"primaryKey" json:"id"`
-	Date          time.Time            `json:"date"`
+	Date          time.Time            `gorm:"index" json:"date"`
 	CommodityType config.CommodityType `json:"commodity_type"`
 	CommodityID   string               `json:"commodity_id"`
-	CommodityName string               `json:"commodity_name"`
+	CommodityName string               `gorm:"index" json:"commodity_name"`
 	Value         decimal.Decimal      `json:"value"`
 }
 
