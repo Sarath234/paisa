@@ -1,8 +1,8 @@
 {
   "accounts": [
-    "Income:Salary:Acme",
     "Assets:Checking",
-    "Assets:Equity:AAPL"
+    "Assets:Equity:AAPL",
+    "Income:Salary:Acme"
   ],
   "config": {
     "journal_path": "main.ledger",
