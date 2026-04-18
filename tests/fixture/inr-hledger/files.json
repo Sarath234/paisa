@@ -1,22 +1,22 @@
 {
   "accounts": [
+    "Income:Salary:Acme",
     "Assets:Checking",
-    "Assets:Dollar",
-    "Assets:Equity:AAPL",
-    "Assets:Equity:ABNB",
-    "Assets:Equity:NIFTY",
-    "Expenses:Charges",
     "Expenses:Rent",
+    "Assets:Equity:NIFTY",
+    "Assets:Equity:ABNB",
+    "Assets:Equity:AAPL",
     "Income:CapitalGains:Equity:AAPL",
-    "Income:Interest:Checking",
-    "Income:Salary:Acme"
+    "Expenses:Charges",
+    "Assets:Dollar",
+    "Income:Interest:Checking"
   ],
   "commodities": [
-    "AAPL",
-    "ABNB",
     "INR",
     "NIFTY",
-    "USD"
+    "ABNB",
+    "USD",
+    "AAPL"
   ],
   "files": [
     {
