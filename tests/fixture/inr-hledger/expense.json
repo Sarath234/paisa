@@ -125,7 +125,7 @@
         {
           "source": 1,
           "target": 4,
-          "value": 1.52
+          "value": 16050.6340142592
         },
         {
           "source": 1,
@@ -424,7 +424,7 @@
           "account": "Assets:Equity:ABNB",
           "commodity": "ABNB",
           "quantity": 0.76,
-          "amount": 0.76,
+          "amount": 8025.3170071296,
           "status": "unmarked",
           "tag_recurring": "",
           "tag_period": "",
@@ -466,7 +466,7 @@
           "account": "Assets:Equity:ABNB",
           "commodity": "ABNB",
           "quantity": 0.76,
-          "amount": 0.76,
+          "amount": 8025.3170071296,
           "status": "unmarked",
           "tag_recurring": "",
           "tag_period": "",
@@ -844,7 +844,7 @@
           "account": "Assets:Equity:ABNB",
           "commodity": "ABNB",
           "quantity": 0.76,
-          "amount": 0.76,
+          "amount": 8025.3170071296,
           "status": "unmarked",
           "tag_recurring": "",
           "tag_period": "",
@@ -886,7 +886,7 @@
           "account": "Assets:Equity:ABNB",
           "commodity": "ABNB",
           "quantity": 0.76,
-          "amount": 0.76,
+          "amount": 8025.3170071296,
           "status": "unmarked",
           "tag_recurring": "",
           "tag_period": "",
