@@ -14,7 +14,15 @@ jobs:
       with:
         primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
         restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}
-    - run: |
-        nix develop --command npm install
-        nix develop --command make lint
-        nix develop --command make test
+    - run: nix develop --command npm install
+    - run: nix develop --command make lint
+    - run: nix develop --command make regen
+    - name: Upload regenerated fixtures
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fixtures
+        path: tests/fixture/
+    - name: Verify fixtures are up to date
+      run: git diff --exit-code tests/fixture/
+    - run: nix develop --command bash -c 'bun test --preload ./src/happydom.ts src && npm run build && go test ./...'
