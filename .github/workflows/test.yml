@@ -16,7 +16,7 @@ jobs:
         restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}
     - run: nix develop --command npm install
     - run: nix develop --command make lint
-    - run: nix develop --command make regen
+    - run: nix develop --command bash -c 'npm run build && make regen'
     - name: Upload regenerated fixtures
       if: always()
       uses: actions/upload-artifact@v4
