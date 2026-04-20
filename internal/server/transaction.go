@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/ananthakumaran/paisa/internal/accounting"
+	"github.com/ananthakumaran/paisa/internal/model/posting"
 	"github.com/ananthakumaran/paisa/internal/model/transaction"
 	"github.com/ananthakumaran/paisa/internal/query"
 	"github.com/gin-gonic/gin"
@@ -29,12 +30,14 @@ func GetBalancedPostings(db *gorm.DB) gin.H {
 	return gin.H{"balancedPostings": balancePostings}
 }
 
-func GetLatestTransactions(db *gorm.DB) []transaction.Transaction {
-	postings := query.Init(db).Desc().Limit(200).All()
-	transactions := transaction.Build(postings)
+func GetLatestTransactions(allPostings []posting.Posting) []transaction.Transaction {
+	transactions := transaction.Build(allPostings)
 
 	sort.Slice(transactions, func(i, j int) bool { return transactions[i].ID > transactions[j].ID })
 	sort.SliceStable(transactions, func(i, j int) bool { return transactions[i].Date.After(transactions[j].Date) })
 
+	if len(transactions) > 200 {
+		transactions = transactions[:200]
+	}
 	return transactions
 }

@@ -27,8 +27,19 @@ type AssetBreakdown struct {
 	AbsoluteReturn   decimal.Decimal `json:"absoluteReturn"`
 }
 
-func GetCheckingBalance(db *gorm.DB) gin.H {
-	return doGetBalance(db, "Assets:Checking:%", false)
+func GetCheckingBalance(db *gorm.DB, allPostings []posting.Posting) gin.H {
+	var ps []posting.Posting
+	for _, p := range allPostings {
+		if accountPrefixMatch(p.Account, "Assets:Checking") || strings.HasPrefix(p.Account, "Income:CapitalGains:") {
+			ps = append(ps, p)
+		}
+	}
+	ps = service.PopulateMarketPrice(db, ps)
+	return gin.H{"asset_breakdowns": ComputeBreakdowns(db, ps, false)}
+}
+
+func accountPrefixMatch(account, prefix string) bool {
+	return account == prefix || strings.HasPrefix(account, prefix+":")
 }
 
 func GetBalance(db *gorm.DB) gin.H {

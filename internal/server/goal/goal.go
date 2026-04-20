@@ -1,7 +1,10 @@
 package goal
 
 import (
+	"strings"
+
 	"github.com/ananthakumaran/paisa/internal/config"
+	"github.com/ananthakumaran/paisa/internal/model/posting"
 	"github.com/ananthakumaran/paisa/internal/query"
 	"github.com/ananthakumaran/paisa/internal/service"
 	"github.com/gin-gonic/gin"
@@ -22,8 +25,22 @@ type GoalSummary struct {
 }
 
 func GetGoalSummaries(db *gorm.DB) []GoalSummary {
-	summaries := []GoalSummary{}
 	assetPostings := query.Init(db).Like("Assets:%").All()
+	return getGoalSummariesFromPostings(db, assetPostings)
+}
+
+func GetGoalSummariesFromPostings(db *gorm.DB, allPostings []posting.Posting) []GoalSummary {
+	var assetPostings []posting.Posting
+	for _, p := range allPostings {
+		if strings.HasPrefix(p.Account, "Assets:") {
+			assetPostings = append(assetPostings, p)
+		}
+	}
+	return getGoalSummariesFromPostings(db, assetPostings)
+}
+
+func getGoalSummariesFromPostings(db *gorm.DB, assetPostings []posting.Posting) []GoalSummary {
+	summaries := []GoalSummary{}
 	assetPostings = service.PopulateMarketPrice(db, assetPostings)
 
 	for _, goal := range config.GetConfig().Goals.Retirement {

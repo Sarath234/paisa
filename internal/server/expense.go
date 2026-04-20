@@ -36,8 +36,18 @@ type Graph struct {
 	Links []Link `json:"links"`
 }
 
-func GetCurrentExpense(db *gorm.DB) map[string][]posting.Posting {
-	expenses := query.Init(db).LastNMonths(3).Like("Expenses:%").NotAccountPrefix("Expenses:Tax").All()
+func GetCurrentExpense(allPostings []posting.Posting) map[string][]posting.Posting {
+	monthStart := utils.BeginningOfMonth(utils.Now())
+	start := monthStart.AddDate(0, -2, 0)
+	end := monthStart.AddDate(0, 1, 0)
+	var expenses []posting.Posting
+	for _, p := range allPostings {
+		if (p.Date.Equal(start) || p.Date.After(start)) && p.Date.Before(end) &&
+			strings.HasPrefix(p.Account, "Expenses:") &&
+			!accountPrefixMatch(p.Account, "Expenses:Tax") {
+			expenses = append(expenses, p)
+		}
+	}
 	return utils.GroupByMonth(expenses)
 }
 

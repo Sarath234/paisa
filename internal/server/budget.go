@@ -2,6 +2,7 @@ package server
 
 import (
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/accounting"
@@ -36,17 +37,28 @@ type Budget struct {
 func GetBudget(db *gorm.DB) gin.H {
 	forecastPostings := query.Init(db).Like("Expenses:%").Forecast().All()
 	expenses := query.Init(db).Like("Expenses:%").All()
-	return computeBudet(db, forecastPostings, expenses)
-}
-
-func GetCurrentBudget(db *gorm.DB) gin.H {
-	forecastPostings := query.Init(db).Like("Expenses:%").Forecast().UntilThisMonthEnd().All()
-	expenses := query.Init(db).Like("Expenses:%").UntilThisMonthEnd().All()
-	return computeBudet(db, forecastPostings, expenses)
-}
-
-func computeBudet(db *gorm.DB, forecastPostings, expensesPostings []posting.Posting) gin.H {
 	checkingBalance := accounting.CostSum(query.Init(db).AccountPrefix("Assets:Checking").All())
+	return computeBudet(forecastPostings, expenses, checkingBalance)
+}
+
+func GetCurrentBudget(db *gorm.DB, allPostings []posting.Posting, forecastExpenses []posting.Posting) gin.H {
+	thisMonthEnd := utils.EndOfMonth(utils.Now())
+	var expensesPostings []posting.Posting
+	for _, p := range allPostings {
+		if strings.HasPrefix(p.Account, "Expenses:") && !p.Date.After(thisMonthEnd) {
+			expensesPostings = append(expensesPostings, p)
+		}
+	}
+	var checkingPostings []posting.Posting
+	for _, p := range allPostings {
+		if accountPrefixMatch(p.Account, "Assets:Checking") {
+			checkingPostings = append(checkingPostings, p)
+		}
+	}
+	return computeBudet(forecastExpenses, expensesPostings, accounting.CostSum(checkingPostings))
+}
+
+func computeBudet(forecastPostings, expensesPostings []posting.Posting, checkingBalance decimal.Decimal) gin.H {
 	availableForBudgeting := checkingBalance
 
 	forecasts := utils.GroupByMonth(forecastPostings)

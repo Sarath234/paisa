@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
+
 type CashFlow struct {
 	Date        time.Time       `json:"date"`
 	Income      decimal.Decimal `json:"income"`
@@ -29,12 +30,26 @@ func (c CashFlow) GroupDate() time.Time {
 }
 
 func GetCashFlow(db *gorm.DB) gin.H {
-	return gin.H{"cash_flows": computeCashFlow(db, query.Init(db), decimal.Zero)}
+	all := query.Init(db).All()
+	return gin.H{"cash_flows": computeCashFlowFromPostings(all, decimal.Zero)}
 }
 
-func GetCurrentCashFlow(db *gorm.DB) []CashFlow {
-	balance := accounting.CostSum(query.Init(db).BeforeNMonths(3).AccountPrefix("Assets:Checking").All())
-	return computeCashFlow(db, query.Init(db).LastNMonths(3), balance)
+func GetCurrentCashFlow(allPostings []posting.Posting) []CashFlow {
+	monthStart := utils.BeginningOfMonth(utils.Now())
+	windowStart := monthStart.AddDate(0, -2, 0)
+	windowEnd := monthStart.AddDate(0, 1, 0)
+
+	var balancePostings, windowPostings []posting.Posting
+	for _, p := range allPostings {
+		if p.Date.Before(windowStart) && accountPrefixMatch(p.Account, "Assets:Checking") {
+			balancePostings = append(balancePostings, p)
+		}
+		if (p.Date.Equal(windowStart) || p.Date.After(windowStart)) && p.Date.Before(windowEnd) {
+			windowPostings = append(windowPostings, p)
+		}
+	}
+	balance := accounting.CostSum(balancePostings)
+	return computeCashFlowFromPostings(windowPostings, balance)
 }
 
 // accountPrefixMatch returns true if account equals prefix or starts with "prefix:".
@@ -42,11 +57,9 @@ func accountPrefixMatch(account, prefix string) bool {
 	return account == prefix || strings.HasPrefix(account, prefix+":")
 }
 
-func computeCashFlow(db *gorm.DB, q *query.Query, balance decimal.Decimal) []CashFlow {
+func computeCashFlowFromPostings(all []posting.Posting, balance decimal.Decimal) []CashFlow {
 	var cashFlows []CashFlow
 
-	// Single DB query; all per-category filtering is done in-memory.
-	all := q.Clone().All()
 	if len(all) == 0 {
 		return []CashFlow{}
 	}

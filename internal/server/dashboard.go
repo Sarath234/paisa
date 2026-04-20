@@ -9,14 +9,18 @@ import (
 )
 
 func GetDashboard(db *gorm.DB) gin.H {
+	// Fetch all postings once; sub-functions filter in-memory.
+	allPostings := query.Init(db).All()
+	forecastExpenses := query.Init(db).Forecast().Like("Expenses:%").UntilThisMonthEnd().All()
+
 	return gin.H{
-		"checkingBalances":     assets.GetCheckingBalance(db),
-		"networth":             GetCurrentNetworth(db),
-		"expenses":             GetCurrentExpense(db),
-		"cashFlows":            GetCurrentCashFlow(db),
-		"transactionSequences": ComputeRecurringTransactions(query.Init(db).All()),
-		"transactions":         GetLatestTransactions(db),
-		"budget":               GetCurrentBudget(db),
-		"goalSummaries":        goal.GetGoalSummaries(db),
+		"checkingBalances":     assets.GetCheckingBalance(db, allPostings),
+		"networth":             GetCurrentNetworth(db, allPostings),
+		"expenses":             GetCurrentExpense(allPostings),
+		"cashFlows":            GetCurrentCashFlow(allPostings),
+		"transactionSequences": ComputeRecurringTransactions(allPostings),
+		"transactions":         GetLatestTransactions(allPostings),
+		"budget":               GetCurrentBudget(db, allPostings, forecastExpenses),
+		"goalSummaries":        goal.GetGoalSummariesFromPostings(db, allPostings),
 	}
 }

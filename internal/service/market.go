@@ -48,10 +48,10 @@ func buildPriceCache(db *gorm.DB) *priceCache {
 		c.pricesTree[p.CommodityName].ReplaceOrInsert(p)
 	}
 
-	var postings []posting.Posting
-	result = db.Find(&postings)
-	if result.Error != nil {
-		log.Fatal(result.Error)
+	// Load only distinct non-currency commodity names instead of all posting rows.
+	var allCommodities []string
+	if r := db.Model(&posting.Posting{}).Distinct().Pluck("commodity", &allCommodities); r.Error != nil {
+		log.Fatal(r.Error)
 	}
 
 	// Bulk-load all Unknown-type prices in one query instead of N per-commodity queries.
@@ -61,8 +61,8 @@ func buildPriceCache(db *gorm.DB) *priceCache {
 	}
 	unknownByName := lo.GroupBy(unknownPrices, func(p price.Price) string { return p.CommodityName })
 
-	for commodityName, ps := range lo.GroupBy(postings, func(p posting.Posting) string { return p.Commodity }) {
-		if !utils.IsCurrency(ps[0].Commodity) {
+	for _, commodityName := range allCommodities {
+		if !utils.IsCurrency(commodityName) {
 			postingPricesTree := btree.New(2)
 			for _, p := range unknownByName[commodityName] {
 				postingPricesTree.ReplaceOrInsert(p)

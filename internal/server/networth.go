@@ -2,6 +2,7 @@ package server
 
 import (
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/model/posting"
@@ -33,8 +34,17 @@ func GetNetworth(db *gorm.DB) gin.H {
 	return gin.H{"networthTimeline": networthTimeline, "xirr": xirr}
 }
 
-func GetCurrentNetworth(db *gorm.DB) gin.H {
-	postings := query.Init(db).Like("Assets:%", "Income:CapitalGains:%", "Liabilities:%").UntilToday().All()
+func GetCurrentNetworth(db *gorm.DB, allPostings []posting.Posting) gin.H {
+	today := utils.EndOfToday()
+	var postings []posting.Posting
+	for _, p := range allPostings {
+		if p.Date.Before(today) &&
+			(strings.HasPrefix(p.Account, "Assets:") ||
+				strings.HasPrefix(p.Account, "Income:CapitalGains:") ||
+				strings.HasPrefix(p.Account, "Liabilities:")) {
+			postings = append(postings, p)
+		}
+	}
 	postings = service.PopulateMarketPrice(db, postings)
 	networth := computeNetworth(db, postings)
 	xirr := service.XIRR(db, postings)
