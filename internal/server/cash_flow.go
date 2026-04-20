@@ -13,7 +13,6 @@ import (
 	"gorm.io/gorm"
 )
 
-
 type CashFlow struct {
 	Date        time.Time       `json:"date"`
 	Income      decimal.Decimal `json:"income"`
