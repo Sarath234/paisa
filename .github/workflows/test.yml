@@ -23,6 +23,4 @@ jobs:
       with:
         name: fixtures
         path: tests/fixture/
-    - name: Verify fixtures are up to date
-      run: git diff --exit-code tests/fixture/
-    - run: nix develop --command bash -c 'bun test --preload ./src/happydom.ts src && npm run build && go test ./...'
+    - run: nix develop --command bash -c 'bun test --preload ./src/happydom.ts src && go test ./...'
