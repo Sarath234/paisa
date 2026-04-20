@@ -54,16 +54,17 @@ func buildPriceCache(db *gorm.DB) *priceCache {
 		log.Fatal(result.Error)
 	}
 
+	// Bulk-load all Unknown-type prices in one query instead of N per-commodity queries.
+	var unknownPrices []price.Price
+	if r := db.Where("commodity_type = ?", config.Unknown).Find(&unknownPrices); r.Error != nil {
+		log.Fatal(r.Error)
+	}
+	unknownByName := lo.GroupBy(unknownPrices, func(p price.Price) string { return p.CommodityName })
+
 	for commodityName, ps := range lo.GroupBy(postings, func(p posting.Posting) string { return p.Commodity }) {
 		if !utils.IsCurrency(ps[0].Commodity) {
-			var commodityPrices []price.Price
-			result := db.Where("commodity_type = ? and commodity_name = ?", config.Unknown, commodityName).Find(&commodityPrices)
-			if result.Error != nil {
-				log.Fatal(result.Error)
-			}
-
 			postingPricesTree := btree.New(2)
-			for _, p := range commodityPrices {
+			for _, p := range unknownByName[commodityName] {
 				postingPricesTree.ReplaceOrInsert(p)
 			}
 			c.postingPricesTree[commodityName] = postingPricesTree

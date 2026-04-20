@@ -1,9 +1,11 @@
 package server
 
 import (
+	"sort"
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/model/posting"
+	"github.com/ananthakumaran/paisa/internal/model/price"
 	"github.com/ananthakumaran/paisa/internal/query"
 	"github.com/ananthakumaran/paisa/internal/service"
 	"github.com/ananthakumaran/paisa/internal/utils"
@@ -88,6 +90,17 @@ func computeNetworth(db *gorm.DB, postings []posting.Posting) Networth {
 	return networth
 }
 
+// priceFloor returns the newest price with date <= target from a descending-sorted slice.
+func priceFloor(prices []price.Price, target time.Time) price.Price {
+	i := sort.Search(len(prices), func(i int) bool {
+		return !prices[i].Date.After(target)
+	})
+	if i < len(prices) {
+		return prices[i]
+	}
+	return price.Price{}
+}
+
 func computeNetworthTimeline(db *gorm.DB, postings []posting.Posting, computeBalanceUnits bool) []Networth {
 	var networths []Networth
 
@@ -95,6 +108,19 @@ func computeNetworthTimeline(db *gorm.DB, postings []posting.Posting, computeBal
 
 	if len(postings) == 0 {
 		return []Networth{}
+	}
+
+	// Preload full price series for every non-currency commodity once to avoid
+	// a per-day BTree lookup (which would be O(days × commodities × log n)).
+	commoditySet := make(map[string]struct{})
+	for _, p := range postings {
+		if !utils.IsCurrency(p.Commodity) {
+			commoditySet[p.Commodity] = struct{}{}
+		}
+	}
+	preloadedPrices := make(map[string][]price.Price, len(commoditySet))
+	for commodity := range commoditySet {
+		preloadedPrices[commodity] = service.GetAllPrices(db, commodity)
 	}
 
 	type RunningSum struct {
@@ -147,9 +173,9 @@ func computeNetworthTimeline(db *gorm.DB, postings []posting.Posting, computeBal
 				if computeBalanceUnits {
 					balanceUnits = balanceUnits.Add(rs.balanceUnits)
 				}
-				price := service.GetUnitPrice(db, commodity, start)
-				if !price.Value.Equal(decimal.Zero) {
-					balance = balance.Add(rs.balanceUnits.Mul(price.Value))
+				pc := priceFloor(preloadedPrices[commodity], start)
+				if !pc.Value.Equal(decimal.Zero) {
+					balance = balance.Add(rs.balanceUnits.Mul(pc.Value))
 				} else {
 					balance = balance.Add(rs.balance)
 				}

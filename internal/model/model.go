@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/ananthakumaran/paisa/internal/config"
 	"github.com/ananthakumaran/paisa/internal/ledger"
@@ -72,25 +73,38 @@ func SyncCommodities(db *gorm.DB) error {
 	log.Info("Fetching commodities price history")
 	commodities := lo.Shuffle(commodity.All())
 
+	const maxConcurrent = 5
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	var errors []error
-	for _, commodity := range commodities {
-		name := commodity.Name
-		log.Info("Fetching commodity ", name)
-		code := commodity.Price.Code
-		var prices []*price.Price
-		var err error
 
-		provider := scraper.GetProviderByCode(commodity.Price.Provider)
-		prices, err = provider.GetPrices(code, name)
+	for _, c := range commodities {
+		c := c
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
 
-		if err != nil {
-			log.Error(err)
-			errors = append(errors, fmt.Errorf("Failed to fetch price for %s: %w", name, err))
-			continue
-		}
+			name := c.Name
+			log.Info("Fetching commodity ", name)
+			code := c.Price.Code
 
-		price.UpsertAllByTypeNameAndID(db, commodity.Type, name, code, prices)
+			provider := scraper.GetProviderByCode(c.Price.Provider)
+			prices, err := provider.GetPrices(code, name)
+			if err != nil {
+				log.Error(err)
+				mu.Lock()
+				errors = append(errors, fmt.Errorf("Failed to fetch price for %s: %w", name, err))
+				mu.Unlock()
+				return
+			}
+
+			price.UpsertAllByTypeNameAndID(db, c.Type, name, code, prices)
+		}()
 	}
+	wg.Wait()
 
 	if len(errors) > 0 {
 		var message string

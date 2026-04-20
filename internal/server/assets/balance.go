@@ -60,17 +60,25 @@ func ComputeBreakdowns(db *gorm.DB, postings []posting.Posting, rollup bool) map
 
 	}
 
-	result := make(map[string]AssetBreakdown)
-
-	for group, leaf := range accounts {
-		ps := lo.Filter(postings, func(p posting.Posting, _ int) bool {
-			account := p.Account
-			if service.IsCapitalGains(p) {
-				account = service.CapitalGainsSourceAccount(p.Account)
+	// Build postingsByGroup in one O(n × depth) pass instead of O(n × accounts) per group.
+	postingsByGroup := make(map[string][]posting.Posting, len(accounts))
+	for _, p := range postings {
+		account := p.Account
+		if service.IsCapitalGains(p) {
+			account = service.CapitalGainsSourceAccount(p.Account)
+		}
+		parts := strings.Split(account, ":")
+		for i := 1; i <= len(parts); i++ {
+			group := strings.Join(parts[:i], ":")
+			if _, exists := accounts[group]; exists {
+				postingsByGroup[group] = append(postingsByGroup[group], p)
 			}
-			return utils.IsSameOrParent(account, group)
-		})
-		result[group] = ComputeBreakdown(db, ps, leaf, group)
+		}
+	}
+
+	result := make(map[string]AssetBreakdown)
+	for group, leaf := range accounts {
+		result[group] = ComputeBreakdown(db, postingsByGroup[group], leaf, group)
 	}
 
 	return result
