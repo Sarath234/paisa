@@ -21,8 +21,19 @@ jobs:
         go-version: '1.24.2'
     - run: |
         brew install --force --overwrite sqlite3 create-dmg
-        brew install --build-from-source --verbose ./ledger.rb
-        cp "$(brew --prefix ledger)/bin/ledger" internal/binary/ledger
+        # Create a temporary git-backed tap so Homebrew accepts the local formula.
+        # Also fix the hardcoded /usr/local paths for Apple Silicon compatibility.
+        TAPDIR=$(mktemp -d)
+        git init "$TAPDIR"
+        git -C "$TAPDIR" config user.email "ci@example.com"
+        git -C "$TAPDIR" config user.name "CI"
+        mkdir -p "$TAPDIR/Formula"
+        sed "s|/usr/local/lib|$(brew --prefix)/lib|g" ledger.rb > "$TAPDIR/Formula/ledger.rb"
+        git -C "$TAPDIR" add -A
+        git -C "$TAPDIR" commit -m "ledger"
+        brew tap local/paisa "file://$TAPDIR"
+        brew install --build-from-source local/paisa/ledger
+        cp "$(brew --prefix local/paisa/ledger)/bin/ledger" internal/binary/ledger
         npm install
         npm run build
         go build
