@@ -86,6 +86,13 @@ func SyncCommodities(db *gorm.DB) error {
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
+			defer func() {
+				if r := recover(); r != nil {
+					mu.Lock()
+					errors = append(errors, fmt.Errorf("panic fetching price for %s: %v", c.Name, r))
+					mu.Unlock()
+				}
+			}()
 
 			name := c.Name
 			log.Info("Fetching commodity ", name)

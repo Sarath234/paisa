@@ -90,6 +90,10 @@ func GetHistory(ticker string, commodityName string) ([]*price.Price, error) {
 		return nil, err
 	}
 
+	if len(response.Chart.Result) == 0 {
+		return nil, fmt.Errorf("no data returned from Yahoo Finance for ticker %s", ticker)
+	}
+
 	var prices []*price.Price
 	result := response.Chart.Result[0]
 	needExchangePrice := false
@@ -102,6 +106,9 @@ func GetHistory(ticker string, commodityName string) ([]*price.Price, error) {
 			return nil, err
 		}
 
+		if len(exchangeResponse.Chart.Result) == 0 {
+			return nil, fmt.Errorf("no exchange rate data from Yahoo Finance for %s", result.Meta.Currency)
+		}
 		exchangeResult := exchangeResponse.Chart.Result[0]
 
 		exchangePrice = btree.New(2)
