@@ -7,6 +7,9 @@ on:
     tags:
       - '*'
 
+permissions:
+  contents: write
+
 jobs:
   linux-cli-arm64-binary:
     runs-on: ubuntu-22.04-arm
