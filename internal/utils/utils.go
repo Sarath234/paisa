@@ -228,6 +228,16 @@ func GroupByFY[G GroupableByDate](groupables []G) map[string][]G {
 	return grouped
 }
 
+func GroupByWeek[G GroupableByDate](groupables []G) map[string][]G {
+	grouped := make(map[string][]G)
+	for _, g := range groupables {
+		isoYear, isoWeek := g.GroupDate().ISOWeek()
+		key := fmt.Sprintf("%d-W%02d", isoYear, isoWeek)
+		grouped[key] = append(grouped[key], g)
+	}
+	return grouped
+}
+
 func GroupByYearCutoffAt[G GroupableByDate](groupables []G, date time.Time) map[string][]G {
 	grouped := make(map[string][]G)
 	for _, g := range groupables {

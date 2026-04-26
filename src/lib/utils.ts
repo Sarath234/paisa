@@ -628,6 +628,8 @@ export function ajax(route: "/api/expense"): Promise<{
   };
   graph: { [key: string]: Graph };
   segmented_graph: { [key: string]: Graph };
+  segmented_graph_monthly: { [key: string]: Graph };
+  segmented_graph_weekly: { [key: string]: Graph };
 }>;
 
 export function ajax(route: "/api/budget"): Promise<{

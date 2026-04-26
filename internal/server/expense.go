@@ -68,6 +68,16 @@ func GetExpense(db *gorm.DB) gin.H {
 		segmentedGraph[fy] = sortGraph(computeSegmentedGraph(ps))
 	}
 
+	segmentedGraphMonthly := make(map[string]Graph)
+	for month, ps := range utils.GroupByMonth(postings) {
+		segmentedGraphMonthly[month] = sortGraph(computeSegmentedGraph(ps))
+	}
+
+	segmentedGraphWeekly := make(map[string]Graph)
+	for week, ps := range utils.GroupByWeek(postings) {
+		segmentedGraphWeekly[week] = sortGraph(computeSegmentedGraph(ps))
+	}
+
 	return gin.H{
 		"expenses": expenses,
 		"month_wise": gin.H{
@@ -80,8 +90,10 @@ func GetExpense(db *gorm.DB) gin.H {
 			"incomes":     utils.GroupByFY(incomes),
 			"investments": utils.GroupByFY(investments),
 			"taxes":       utils.GroupByFY(taxes)},
-		"graph":           graph,
-		"segmented_graph": segmentedGraph}
+		"graph":                   graph,
+		"segmented_graph":         segmentedGraph,
+		"segmented_graph_monthly": segmentedGraphMonthly,
+		"segmented_graph_weekly":  segmentedGraphWeekly}
 }
 
 func sortGraph(graph Graph) Graph {
