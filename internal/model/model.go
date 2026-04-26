@@ -73,11 +73,17 @@ func SyncCommodities(db *gorm.DB) error {
 	log.Info("Fetching commodities price history")
 	commodities := lo.Shuffle(commodity.All())
 
+	type fetchResult struct {
+		commodity config.Commodity
+		prices    []*price.Price
+		err       error
+	}
+
+	// Fetch prices concurrently (network-bound); collect results for sequential DB writes.
 	const maxConcurrent = 5
 	sem := make(chan struct{}, maxConcurrent)
+	results := make(chan fetchResult, len(commodities))
 	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var errors []error
 
 	for _, c := range commodities {
 		c := c
@@ -88,30 +94,28 @@ func SyncCommodities(db *gorm.DB) error {
 			defer func() { <-sem }()
 			defer func() {
 				if r := recover(); r != nil {
-					mu.Lock()
-					errors = append(errors, fmt.Errorf("panic fetching price for %s: %v", c.Name, r))
-					mu.Unlock()
+					results <- fetchResult{commodity: c, err: fmt.Errorf("panic fetching price for %s: %v", c.Name, r)}
 				}
 			}()
 
-			name := c.Name
-			log.Info("Fetching commodity ", name)
-			code := c.Price.Code
-
-			provider := scraper.GetProviderByCode(c.Price.Provider)
-			prices, err := provider.GetPrices(code, name)
-			if err != nil {
-				log.Error(err)
-				mu.Lock()
-				errors = append(errors, fmt.Errorf("Failed to fetch price for %s: %w", name, err))
-				mu.Unlock()
-				return
-			}
-
-			price.UpsertAllByTypeNameAndID(db, c.Type, name, code, prices)
+			log.Info("Fetching commodity ", c.Name)
+			prices, err := scraper.GetProviderByCode(c.Price.Provider).GetPrices(c.Price.Code, c.Name)
+			results <- fetchResult{commodity: c, prices: prices, err: err}
 		}()
 	}
 	wg.Wait()
+	close(results)
+
+	// Write to DB sequentially to avoid SQLite write contention.
+	var errors []error
+	for r := range results {
+		if r.err != nil {
+			log.Error(r.err)
+			errors = append(errors, fmt.Errorf("Failed to fetch price for %s: %w", r.commodity.Name, r.err))
+			continue
+		}
+		price.UpsertAllByTypeNameAndID(db, r.commodity.Type, r.commodity.Name, r.commodity.Price.Code, r.prices)
+	}
 
 	if len(errors) > 0 {
 		var message string
