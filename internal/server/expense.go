@@ -44,7 +44,7 @@ func GetCurrentExpense(allPostings []posting.Posting) map[string][]posting.Posti
 	for _, p := range allPostings {
 		if (p.Date.Equal(start) || p.Date.After(start)) && p.Date.Before(end) &&
 			strings.HasPrefix(p.Account, "Expenses:") &&
-			!accountPrefixMatch(p.Account, "Expenses:Tax") {
+			!utils.IsSameOrParent(p.Account, "Expenses:Tax") {
 			expenses = append(expenses, p)
 		}
 	}

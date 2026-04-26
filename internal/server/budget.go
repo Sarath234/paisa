@@ -51,7 +51,7 @@ func GetCurrentBudget(db *gorm.DB, allPostings []posting.Posting, forecastExpens
 	}
 	var checkingPostings []posting.Posting
 	for _, p := range allPostings {
-		if accountPrefixMatch(p.Account, "Assets:Checking") {
+		if utils.IsSameOrParent(p.Account, "Assets:Checking") {
 			checkingPostings = append(checkingPostings, p)
 		}
 	}
