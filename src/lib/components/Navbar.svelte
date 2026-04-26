@@ -65,7 +65,6 @@
         {
           label: "Segmented",
           href: "/segmented",
-          financialYearPicker: true,
           maxDepthSelector: true
         },
         {
