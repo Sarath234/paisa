@@ -183,22 +183,36 @@ func (HLedgerCLI) ValidateFile(journalPath string) ([]LedgerFileError, string, e
 }
 
 func (HLedgerCLI) Parse(journalPath string, prices []price.Price) ([]*posting.Posting, error) {
-	var postings []*posting.Posting
-
-	postings, err := execHLedgerCommand(journalPath, prices, []string{})
-	if err != nil {
-		return nil, err
+	type result struct {
+		postings []*posting.Posting
+		err      error
 	}
+
+	ch1 := make(chan result, 1)
+	ch2 := make(chan result, 1)
+
+	go func() {
+		ps, err := execHLedgerCommand(journalPath, prices, []string{})
+		ch1 <- result{ps, err}
+	}()
 
 	timeRange := fmt.Sprintf("%d..%d", utils.Now().Year()-3, utils.Now().Year()+3)
-	budgetPostings, err := execHLedgerCommand(journalPath, prices, []string{"--ignore-assertions", "--forecast=" + timeRange, "tag:_generated-transaction"})
+	go func() {
+		ps, err := execHLedgerCommand(journalPath, prices, []string{"--ignore-assertions", "--forecast=" + timeRange, "tag:_generated-transaction"})
+		ch2 <- result{ps, err}
+	}()
 
-	if err != nil {
-		return nil, err
+	r1 := <-ch1
+	if r1.err != nil {
+		return nil, r1.err
 	}
 
-	return append(postings, budgetPostings...), nil
+	r2 := <-ch2
+	if r2.err != nil {
+		return nil, r2.err
+	}
 
+	return append(r1.postings, r2.postings...), nil
 }
 
 func (HLedgerCLI) Prices(journalPath string) ([]price.Price, error) {
