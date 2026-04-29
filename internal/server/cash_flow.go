@@ -40,7 +40,7 @@ func GetCurrentCashFlow(allPostings []posting.Posting) []CashFlow {
 
 	var balancePostings, windowPostings []posting.Posting
 	for _, p := range allPostings {
-		if p.Date.Before(windowStart) && accountPrefixMatch(p.Account, "Assets:Checking") {
+		if p.Date.Before(windowStart) && utils.IsSameOrParent(p.Account, "Assets:Checking") {
 			balancePostings = append(balancePostings, p)
 		}
 		if (p.Date.Equal(windowStart) || p.Date.After(windowStart)) && p.Date.Before(windowEnd) {
@@ -49,11 +49,6 @@ func GetCurrentCashFlow(allPostings []posting.Posting) []CashFlow {
 	}
 	balance := accounting.CostSum(balancePostings)
 	return computeCashFlowFromPostings(windowPostings, balance)
-}
-
-// accountPrefixMatch returns true if account equals prefix or starts with "prefix:".
-func accountPrefixMatch(account, prefix string) bool {
-	return account == prefix || strings.HasPrefix(account, prefix+":")
 }
 
 func computeCashFlowFromPostings(all []posting.Posting, balance decimal.Decimal) []CashFlow {
@@ -67,7 +62,7 @@ func computeCashFlowFromPostings(all []posting.Posting, balance decimal.Decimal)
 	for _, p := range all {
 		a := p.Account
 		switch {
-		case accountPrefixMatch(a, "Expenses:Tax"):
+		case utils.IsSameOrParent(a, "Expenses:Tax"):
 			taxList = append(taxList, p)
 		case strings.HasPrefix(a, "Expenses:"):
 			expenseList = append(expenseList, p)
@@ -75,7 +70,7 @@ func computeCashFlowFromPostings(all []posting.Posting, balance decimal.Decimal)
 			incomeList = append(incomeList, p)
 		case strings.HasPrefix(a, "Liabilities:"):
 			liabilityList = append(liabilityList, p)
-		case accountPrefixMatch(a, "Assets:Checking"):
+		case utils.IsSameOrParent(a, "Assets:Checking"):
 			checkingList = append(checkingList, p)
 		case strings.HasPrefix(a, "Assets:"):
 			investmentList = append(investmentList, p)
