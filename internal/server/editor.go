@@ -124,6 +124,8 @@ func SaveFile(db *gorm.DB, file LedgerFile) gin.H {
 		return gin.H{"errors": errors, "saved": false, "message": "Failed to write file"}
 	}
 
+	pruneOldBackups(filePath, 10)
+
 	Sync(db, SyncRequest{Journal: true})
 
 	return gin.H{"errors": errors, "saved": true, "file": readLedgerFileWithVersions(dir, filePath)}
@@ -153,6 +155,16 @@ func validateFile(file LedgerFile) ([]ledger.LedgerFileError, string, error) {
 	}
 
 	return ledger.Cli().ValidateFile(tmpfile.Name())
+}
+
+func pruneOldBackups(filePath string, maxBackups int) {
+	backups, _ := filepath.Glob(filePath + ".backup.*")
+	sort.Strings(backups)
+	if len(backups) > maxBackups {
+		for _, old := range backups[:len(backups)-maxBackups] {
+			os.Remove(old)
+		}
+	}
 }
 
 func readLedgerFile(dir string, path string) *LedgerFile {
