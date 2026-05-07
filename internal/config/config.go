@@ -375,6 +375,10 @@ func GetDBPath() string {
 	return config.DBPath
 }
 
+func SetDBPath(path string) {
+	config.DBPath = path
+}
+
 func GetConfigDir() string {
 	return filepath.Dir(configPath)
 }
