@@ -12,6 +12,7 @@ import (
 	"github.com/ananthakumaran/paisa/internal/config"
 	"github.com/ananthakumaran/paisa/internal/generator"
 	"github.com/ananthakumaran/paisa/internal/ledger"
+	"github.com/ananthakumaran/paisa/internal/model/importrule"
 	"github.com/ananthakumaran/paisa/internal/model/template"
 	"github.com/ananthakumaran/paisa/internal/prediction"
 	"github.com/ananthakumaran/paisa/internal/server/assets"
@@ -356,6 +357,37 @@ func Build(db *gorm.DB, enableCompression bool) *gin.Engine {
 		}
 
 		template.Delete(t.Name)
+		c.JSON(200, gin.H{"success": true})
+	})
+
+	router.GET("/api/import/rules", func(c *gin.Context) {
+		c.JSON(200, gin.H{"rules": importrule.All()})
+	})
+
+	router.POST("/api/import/rules/upsert", func(c *gin.Context) {
+		if config.GetConfig().Readonly {
+			c.JSON(200, gin.H{"saved": false, "message": "Readonly mode"})
+			return
+		}
+		var rule config.ImportRule
+		if err := c.ShouldBindJSON(&rule); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"rule": importrule.Upsert(rule), "saved": true})
+	})
+
+	router.POST("/api/import/rules/delete", func(c *gin.Context) {
+		if config.GetConfig().Readonly {
+			c.JSON(200, gin.H{"success": false, "message": "Readonly mode"})
+			return
+		}
+		var rule config.ImportRule
+		if err := c.ShouldBindJSON(&rule); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		importrule.Delete(rule.Name)
 		c.JSON(200, gin.H{"success": true})
 	})
 
