@@ -392,6 +392,10 @@ func GetConfigPath() string {
 	return configPath
 }
 
+func SetConfigPath(path string) {
+	configPath = path
+}
+
 func GetSchema() any {
 	var schemaObject any
 	err := json.Unmarshal([]byte(SchemaJson), &schemaObject)
