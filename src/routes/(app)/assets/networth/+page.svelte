@@ -24,6 +24,7 @@
   let svg: Element;
   let destroy: () => void;
   let points: Networth[] = [];
+  let forecastPoints: Networth[] = [];
   let legends: Legend[] = [];
 
   $: if (!_.isEmpty(points)) {
@@ -36,6 +37,7 @@
         points,
         (p) => p.date.isSameOrBefore($dateRange.to) && p.date.isSameOrAfter($dateRange.from)
       ),
+      forecastPoints,
       svg
     ));
   }
@@ -49,6 +51,7 @@
   onMount(async () => {
     const result = await ajax("/api/networth");
     points = result.networthTimeline;
+    forecastPoints = result.forecast || [];
     setAllowedDateRange(_.map(points, (p) => p.date));
 
     const current = _.last(points);
