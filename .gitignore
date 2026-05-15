@@ -8,6 +8,7 @@ web/static
 /main.ledger
 .DS_Store
 node_modules
+.superpowers/
 /build
 /.svelte-kit
 /package
