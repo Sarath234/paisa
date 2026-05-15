@@ -79,7 +79,7 @@ Pass `forecast` from the API response as the second argument to `renderNetworth`
 1. Collect all `Expenses:*` accounts from existing postings.
 2. For each account, determine the monthly amount:
    - **Budget source:** query `forecast=true` postings for that account. If entries exist for any future month, use those amounts directly.
-   - **Historical fallback:** if no budget entries exist for an account, compute the average actual spend over the last 3 completed calendar months. Mark as `BudgetMissing = true` (stored in `TagRecurring` field repurposed as source label, or a new metadata approach — see below).
+   - **Historical fallback:** if no budget entries exist for an account, compute the average actual spend over the last 3 completed calendar months. The source is recorded via the `Note` field (see below).
 3. For each of the next 6 months × each account with a non-zero projected amount:
    - Emit a synthetic `Posting` with:
      - `Date = 15th of that month` (mid-month sentinel)
@@ -97,7 +97,7 @@ Pass `forecast` from the API response as the second argument to `renderNetworth`
 `renderMonthlyExpensesTimeline` already receives all postings (including future ones once appended). Changes:
 
 1. When grouping postings by month (`_.groupBy(postings, p => p.date.format(timeFormat))`), future months naturally fall into their own buckets — no grouping logic change needed.
-2. When rendering bars, check if the month is in the future (`month > now`). If yes:
+2. When rendering bars, check if any posting in that month bucket has `Forecast: true`. If yes:
    - Add an SVG `<defs><pattern>` hatch fill per category color.
    - Render bars with `fill="url(#hatch-{color})"` + `stroke` of the same category color + `stroke-dasharray="3,2"`.
 3. Tooltip on forecast bars shows: "Projected · [Account] · ₹X · [budget / est. from 3mo avg]"
