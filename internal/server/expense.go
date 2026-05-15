@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/ananthakumaran/paisa/internal/config"
 	"github.com/ananthakumaran/paisa/internal/model/posting"
 	"github.com/ananthakumaran/paisa/internal/model/transaction"
 	"github.com/ananthakumaran/paisa/internal/query"
@@ -78,6 +80,9 @@ func GetExpense(db *gorm.DB) gin.H {
 		segmentedGraphWeekly[week] = sortGraph(computeSegmentedGraph(ps))
 	}
 
+	budgetPostings := query.Init(db).Like("Expenses:%").Where("forecast = ?", true).All()
+	forecastExpenses := computeExpenseForecast(expenses, budgetPostings)
+
 	return gin.H{
 		"expenses": expenses,
 		"month_wise": gin.H{
@@ -93,7 +98,65 @@ func GetExpense(db *gorm.DB) gin.H {
 		"graph":                   graph,
 		"segmented_graph":         segmentedGraph,
 		"segmented_graph_monthly": segmentedGraphMonthly,
-		"segmented_graph_weekly":  segmentedGraphWeekly}
+		"segmented_graph_weekly":  segmentedGraphWeekly,
+		"forecast_expenses":       forecastExpenses}
+}
+
+func computeExpenseForecast(actuals []posting.Posting, budgetPostings []posting.Posting) []posting.Posting {
+	now := utils.Now()
+
+	type accountMonth struct{ account, month string }
+	budgetByKey := make(map[accountMonth]decimal.Decimal)
+	for _, p := range budgetPostings {
+		k := accountMonth{p.Account, p.Date.Format("2006-01")}
+		budgetByKey[k] = budgetByKey[k].Add(p.Amount)
+	}
+
+	currentMonthStart := utils.BeginningOfMonth(now)
+	threeMonthsStart := currentMonthStart.AddDate(0, -3, 0)
+	recent := lo.Filter(actuals, func(p posting.Posting, _ int) bool {
+		return !p.Date.Before(threeMonthsStart) && p.Date.Before(currentMonthStart) && !p.Forecast
+	})
+	grouped := lo.GroupBy(recent, func(p posting.Posting) string { return p.Account })
+	avgByAccount := make(map[string]decimal.Decimal)
+	for acc, ps := range grouped {
+		total := lo.Reduce(ps, func(sum decimal.Decimal, p posting.Posting, _ int) decimal.Decimal {
+			return sum.Add(p.Amount)
+		}, decimal.Zero)
+		avgByAccount[acc] = total.Div(decimal.NewFromInt(3))
+	}
+
+	accounts := lo.Uniq(lo.Map(actuals, func(p posting.Posting, _ int) string { return p.Account }))
+	sort.Strings(accounts)
+
+	var result []posting.Posting
+	for i := 1; i <= 6; i++ {
+		futureMonth := now.AddDate(0, i, 0)
+		monthStr := futureMonth.Format("2006-01")
+		midMonth := time.Date(futureMonth.Year(), futureMonth.Month(), 15, 0, 0, 0, 0, config.TimeZone())
+		for _, acc := range accounts {
+			var amount decimal.Decimal
+			var note string
+			if budgetAmt, ok := budgetByKey[accountMonth{acc, monthStr}]; ok && budgetAmt.GreaterThan(decimal.Zero) {
+				amount = budgetAmt
+				note = "budget"
+			} else if avg, ok := avgByAccount[acc]; ok && avg.GreaterThan(decimal.Zero) {
+				amount = avg
+				note = "historical"
+			}
+			if amount.GreaterThan(decimal.Zero) {
+				result = append(result, posting.Posting{
+					Date:      midMonth,
+					Account:   acc,
+					Amount:    amount,
+					Commodity: "INR",
+					Note:      note,
+					Forecast:  true,
+				})
+			}
+		}
+	}
+	return result
 }
 
 func sortGraph(graph Graph) Graph {
