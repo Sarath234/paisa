@@ -575,6 +575,7 @@ export function ajax(
 export function ajax(route: "/api/networth"): Promise<{
   networthTimeline: Networth[];
   xirr: number;
+  forecast: Networth[];
 }>;
 export function ajax(route: "/api/gain"): Promise<{
   gain_breakdown: Gain[];
@@ -615,6 +616,7 @@ export function ajax(route: "/api/income"): Promise<{
 }>;
 export function ajax(route: "/api/expense"): Promise<{
   expenses: Posting[];
+  forecast_expenses: Posting[];
   month_wise: {
     expenses: { [key: string]: Posting[] };
     incomes: { [key: string]: Posting[] };
