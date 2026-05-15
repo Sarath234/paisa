@@ -45,6 +45,7 @@ export interface Posting {
   file_name: string;
   note: string;
   transaction_note: string;
+  forecast: boolean;
 
   market_amount: number;
   balance: number;
