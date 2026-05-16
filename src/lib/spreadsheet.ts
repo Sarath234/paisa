@@ -145,3 +145,20 @@ function readFile(file: File): Promise<ArrayBuffer> {
     reader.readAsArrayBuffer(file);
   });
 }
+
+export function applyRules(
+  rows: Array<Record<string, any>>,
+  rules: Array<{ name: string; match: string; account: string }>
+): Array<Record<string, any>> {
+  return rows.map((row) => {
+    const rowText = Object.values(row).join(" ");
+    const matched = rules.find((r) => {
+      try {
+        return new RegExp(r.match, "i").test(rowText);
+      } catch {
+        return false;
+      }
+    });
+    return { ...row, ACCOUNT: matched?.account ?? "" };
+  });
+}

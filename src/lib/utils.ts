@@ -487,6 +487,12 @@ export interface ImportTemplate {
   template_type: string;
 }
 
+export interface ImportRule {
+  name: string;
+  match: string;
+  account: string;
+}
+
 export interface Log {
   time: dayjs.Dayjs;
   level: string;
@@ -682,6 +688,18 @@ export function ajax(
 ): Promise<{ saved: boolean; message?: string; template: ImportTemplate }>;
 export function ajax(
   route: "/api/templates/delete",
+  options?: RequestOptions
+): Promise<{ success: boolean; message?: string }>;
+export function ajax(
+  route: "/api/import/rules",
+  options?: RequestOptions
+): Promise<{ rules: ImportRule[] }>;
+export function ajax(
+  route: "/api/import/rules/upsert",
+  options?: RequestOptions
+): Promise<{ rule: ImportRule; saved: boolean; message?: string }>;
+export function ajax(
+  route: "/api/import/rules/delete",
   options?: RequestOptions
 ): Promise<{ success: boolean; message?: string }>;
 

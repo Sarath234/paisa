@@ -51,6 +51,12 @@ type ImportTemplate struct {
 	Content string `json:"content" yaml:"content"`
 }
 
+type ImportRule struct {
+	Name    string `json:"name" yaml:"name"`
+	Match   string `json:"match" yaml:"match"`
+	Account string `json:"account" yaml:"account"`
+}
+
 type Price struct {
 	Provider string `json:"provider" yaml:"provider"`
 	Code     string `json:"code" yaml:"code"`
@@ -150,6 +156,8 @@ type Config struct {
 
 	ImportTemplates []ImportTemplate `json:"import_templates" yaml:"import_templates"`
 
+	ImportRules []ImportRule `json:"import_rules" yaml:"import_rules"`
+
 	Accounts []Account `json:"accounts" yaml:"accounts"`
 
 	Goals Goals `json:"goals" yaml:"goals"`
@@ -179,6 +187,7 @@ var defaultConfig = Config{
 	AllocationTargets:          []AllocationTarget{},
 	Commodities:                []Commodity{},
 	ImportTemplates:            []ImportTemplate{},
+	ImportRules:                []ImportRule{},
 	Accounts:                   []Account{},
 	Goals:                      Goals{Retirement: []RetirementGoal{}, Savings: []SavingsGoal{}},
 	UserAccounts:               []UserAccount{},
@@ -385,6 +394,10 @@ func GetConfigDir() string {
 
 func GetConfigPath() string {
 	return configPath
+}
+
+func SetConfigPath(path string) {
+	configPath = path
 }
 
 func GetSchema() any {

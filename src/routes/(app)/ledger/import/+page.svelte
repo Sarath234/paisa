@@ -9,11 +9,11 @@
     updateContent as updatePreviewContent
   } from "$lib/editor";
   import Dropzone from "svelte-file-dropzone/Dropzone.svelte";
-  import { parse, asRows, render as renderJournal } from "$lib/spreadsheet";
+  import { parse, asRows, render as renderJournal, applyRules } from "$lib/spreadsheet";
   import _ from "lodash";
   import type { EditorView } from "codemirror";
   import { onMount } from "svelte";
-  import { ajax, type ImportTemplate } from "$lib/utils";
+  import { ajax, type ImportTemplate, type ImportRule } from "$lib/utils";
   import { accountTfIdf } from "../../../../store";
   import * as toast from "bulma-toast";
   import FileModal from "$lib/components/FileModal.svelte";
@@ -32,6 +32,11 @@
   let lastOptions: any;
   let options: { reverse: boolean; trim: boolean } = { reverse: false, trim: true };
 
+  let rules: ImportRule[] = [];
+  let newRule: ImportRule = { name: "", match: "", account: "" };
+  let newRuleRegexError: string = null;
+  let accountList: string[] = [];
+
   let templateEditorDom: Element;
   let templateEditor: EditorView;
 
@@ -41,6 +46,8 @@
   onMount(async () => {
     accountTfIdf.set(await ajax("/api/account/tf_idf"));
     ({ templates } = await ajax("/api/templates"));
+    ({ rules } = await ajax("/api/import/rules"));
+    accountList = Object.keys($accountTfIdf?.index?.docs ?? {}).sort();
     selectedTemplate = templates[0];
     saveAsName = selectedTemplate.name;
     templateEditor = createTemplateEditor(selectedTemplate.content, templateEditorDom);
@@ -113,7 +120,45 @@
     $templateEditorState = _.assign({}, $templateEditorState, { hasUnsavedChanges: false });
   }
 
+  function validateRegex(pattern: string): string | null {
+    try {
+      new RegExp(pattern);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Invalid regex";
+    }
+  }
+
+  async function addRule() {
+    newRuleRegexError = validateRegex(newRule.match);
+    if (newRuleRegexError) return;
+    const { saved, message } = await ajax("/api/import/rules/upsert", {
+      method: "POST",
+      body: JSON.stringify(newRule),
+      background: true
+    });
+    if (!saved) {
+      toast.toast({ message: `Failed to save rule. ${message}`, type: "is-danger", duration: 5000 });
+      return;
+    }
+    ({ rules } = await ajax("/api/import/rules", { background: true }));
+    newRule = { name: "", match: "", account: "" };
+    newRuleRegexError = null;
+  }
+
+  async function deleteRule(name: string) {
+    await ajax("/api/import/rules/delete", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+      background: true
+    });
+    ({ rules } = await ajax("/api/import/rules", { background: true }));
+  }
+
   let input: any;
+
+  let enrichedRows: Array<Record<string, any>> = [];
+  $: enrichedRows = applyRules(rows, rules);
 
   $: if (!_.isEmpty(data) && $templateEditorState.template) {
     if (
@@ -122,7 +167,7 @@
       lastOptions != options
     ) {
       try {
-        preview = renderJournal(rows, $templateEditorState.template, {
+        preview = renderJournal(enrichedRows, $templateEditorState.template, {
           reverse: options.reverse,
           trim: options.trim
         });
@@ -330,6 +375,80 @@
             </div>
           </div>
         </div>
+        <div class="box p-3 mt-3">
+          <p class="has-text-weight-semibold mb-2">Import Rules</p>
+          {#if !_.isEmpty(rules)}
+            <table class="table is-narrow is-fullwidth is-size-7 mb-3">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Match (regex)</th>
+                  <th>Account</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each rules as rule}
+                  <tr>
+                    <td>{rule.name}</td>
+                    <td><code>{rule.match}</code></td>
+                    <td>{rule.account}</td>
+                    <td>
+                      <button
+                        class="button is-small is-danger is-light"
+                        on:click={() => deleteRule(rule.name)}
+                        data-tippy-content="Delete rule"
+                      >
+                        <span class="icon is-small"><i class="fas fa-trash-can" /></span>
+                      </button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/if}
+          <div class="field is-grouped is-grouped-multiline">
+            <div class="control">
+              <input class="input is-small" type="text" placeholder="Name" bind:value={newRule.name} />
+            </div>
+            <div class="control is-expanded">
+              <input
+                class="input is-small"
+                class:is-danger={newRuleRegexError}
+                type="text"
+                placeholder="Regex (e.g. swiggy|zomato)"
+                bind:value={newRule.match}
+                on:blur={() => { newRuleRegexError = validateRegex(newRule.match); }}
+              />
+              {#if newRuleRegexError}
+                <p class="help is-danger">{newRuleRegexError}</p>
+              {/if}
+            </div>
+            <div class="control is-expanded">
+              <input
+                class="input is-small"
+                type="text"
+                placeholder="Account (e.g. Expenses:Food)"
+                list="import-rules-accounts"
+                bind:value={newRule.account}
+              />
+              <datalist id="import-rules-accounts">
+                {#each accountList as account}
+                  <option value={account} />
+                {/each}
+              </datalist>
+            </div>
+            <div class="control">
+              <button
+                class="button is-small is-primary"
+                disabled={_.isEmpty(newRule.name) || _.isEmpty(newRule.match) || _.isEmpty(newRule.account) || !!newRuleRegexError}
+                on:click={addRule}
+              >
+                Add Rule
+              </button>
+            </div>
+          </div>
+        </div>
         <div class="box py-0">
           <div class="field">
             <div class="control">
@@ -408,6 +527,7 @@
                   {#each _.range(0, columnCount) as ci}
                     <th class="has-background-light">{String.fromCharCode(65 + ci)}</th>
                   {/each}
+                  <th class="has-background-light">ACCOUNT</th>
                 </tr>
               </thead>
               <tbody>
@@ -417,6 +537,11 @@
                     {#each row as cell}
                       <td>{cell || ""}</td>
                     {/each}
+                    <td>
+                      {#if enrichedRows[ri]?.ACCOUNT}
+                        <span class="tag is-success is-light is-small">{enrichedRows[ri].ACCOUNT}</span>
+                      {/if}
+                    </td>
                   </tr>
                 {/each}
               </tbody>

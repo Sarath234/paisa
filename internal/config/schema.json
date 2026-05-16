@@ -1032,6 +1032,34 @@
         "additionalProperties": false
       }
     },
+    "import_rules": {
+      "type": "array",
+      "default": [],
+      "itemsUniqueProperties": ["name"],
+      "items": {
+        "type": "object",
+        "ui:header": "name",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the rule",
+            "minLength": 1
+          },
+          "match": {
+            "type": "string",
+            "description": "Regex pattern to match against all row cells",
+            "minLength": 1
+          },
+          "account": {
+            "type": "string",
+            "description": "Ledger account to assign when the pattern matches",
+            "minLength": 1
+          }
+        },
+        "required": ["name", "match", "account"],
+        "additionalProperties": false
+      }
+    },
     "accounts": {
       "type": "array",
       "default": [
