@@ -31,51 +31,41 @@ func GetNetworth(db *gorm.DB) gin.H {
 	postings = service.PopulateMarketPrice(db, postings)
 	networthTimeline := computeNetworthTimeline(db, postings, false)
 	xirr := service.XIRR(db, postings)
-
-	allPostings := query.Init(db).All()
-	var lastNetworth decimal.Decimal
-	if len(networthTimeline) > 0 {
-		last := networthTimeline[len(networthTimeline)-1]
-		lastNetworth = last.BalanceAmount
-	}
-	forecast := computeNetworthForecast(allPostings, lastNetworth)
+	forecast := computeNetworthForecast(networthTimeline)
 
 	return gin.H{"networthTimeline": networthTimeline, "xirr": xirr, "forecast": forecast}
 }
 
-func computeNetworthForecast(allPostings []posting.Posting, lastNetworth decimal.Decimal) []Networth {
-	sequences := ComputeRecurringTransactions(allPostings)
-
-	var monthlyDelta decimal.Decimal
-	for _, seq := range sequences {
-		if len(seq.Transactions) == 0 || seq.Interval == 0 {
-			continue
-		}
-		lastTx := seq.Transactions[0]
-		var hasIncome, hasExpense bool
-		var txAmount decimal.Decimal
-		for _, p := range lastTx.Postings {
-			if strings.HasPrefix(p.Account, "Income:") {
-				hasIncome = true
-			}
-			if strings.HasPrefix(p.Account, "Expenses:") || strings.HasPrefix(p.Account, "Liabilities:") {
-				hasExpense = true
-			}
-			if p.Amount.GreaterThan(decimal.Zero) {
-				txAmount = txAmount.Add(p.Amount)
-			}
-		}
-		occurrencesPerMonth := decimal.NewFromFloat(30.0 / float64(seq.Interval))
-		if hasIncome {
-			monthlyDelta = monthlyDelta.Add(txAmount.Mul(occurrencesPerMonth))
-		} else if hasExpense {
-			monthlyDelta = monthlyDelta.Sub(txAmount.Mul(occurrencesPerMonth))
-		}
-	}
-
+// computeNetworthForecast projects 6 months forward using the average monthly
+// networth change observed over the last 3 calendar months. This captures all
+// cash flows (income, expenses, SIPs, market gains) without requiring
+// explicit recurring-transaction tags.
+func computeNetworthForecast(networthTimeline []Networth) []Networth {
 	now := utils.Now()
 	forecast := make([]Networth, 6)
-	balance := lastNetworth
+
+	var currentBalance decimal.Decimal
+	var monthlyDelta decimal.Decimal
+
+	if len(networthTimeline) > 0 {
+		last := networthTimeline[len(networthTimeline)-1]
+		currentBalance = last.BalanceAmount
+
+		// Walk backward to find the balance ~3 months ago (oldest first in timeline).
+		threeMonthsAgo := now.AddDate(0, -3, 0)
+		pastBalance := currentBalance // fallback: flat projection if history < 3 months
+		for _, nw := range networthTimeline {
+			if !nw.Date.After(threeMonthsAgo) {
+				pastBalance = nw.BalanceAmount
+			} else {
+				break
+			}
+		}
+
+		monthlyDelta = currentBalance.Sub(pastBalance).Div(decimal.NewFromInt(3))
+	}
+
+	balance := currentBalance
 	for i := 0; i < 6; i++ {
 		balance = balance.Add(monthlyDelta)
 		monthEnd := utils.EndOfMonth(now.AddDate(0, i+1, 0))
