@@ -29,8 +29,7 @@ export function renderNetworth(
 ): { destroy: () => void; legends: Legend[] } {
   const start = _.min(_.map(points, (p) => p.date));
   const today = now();
-  const end =
-    forecastPoints.length > 0 ? _.last(forecastPoints).date : today;
+  const end = forecastPoints.length > 0 ? _.last(forecastPoints).date : today;
 
   const svg = d3.select(element);
 
@@ -247,7 +246,9 @@ export function renderNetworth(
       .style("opacity", "0.08")
       .style("pointer-events", "none");
 
-    const forecastLine = forecastPoints.map((p, i) => `${i === 0 ? "M" : "L"}${x(p.date)},${y(networth(p))}`).join(" ");
+    const forecastLine = forecastPoints
+      .map((p, i) => `${i === 0 ? "M" : "L"}${x(p.date)},${y(networth(p))}`)
+      .join(" ");
     const lastActualX = lastActual ? x(lastActual.date) : x(today);
     const lastActualY = lastActual ? y(networth(lastActual)) : y(0);
     const fullForecastLine = `M${lastActualX},${lastActualY} ${forecastLine}`;
