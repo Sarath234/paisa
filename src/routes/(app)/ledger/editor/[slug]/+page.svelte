@@ -86,17 +86,28 @@
 
   async function loadFiles(selectedFileName: string) {
     let files;
-    ({ files, accounts, commodities, payees } = await ajax("/api/editor/files"));
+    ({ files, accounts, commodities, payees } = await ajax("/api/editor/files?metadata_only=true"));
     filesMap = _.fromPairs(_.map(files, (f) => [f.name, f]));
     if (!_.isEmpty(files)) {
-      selectedFile = _.find(files, (f) => f.name == selectedFileName) || files[0];
+      const target = _.find(files, (f) => f.name == selectedFileName) || files[0];
+      const { file: loadedFile } = await ajax("/api/editor/file", {
+        method: "POST",
+        body: JSON.stringify({ name: target.name }),
+        background: true
+      });
+      selectedFile = { ...target, content: loadedFile.content };
     }
   }
 
   async function selectFile(file: LedgerFile) {
     const success = await navigate(`/ledger/editor/${encodeURIComponent(file.name)}`);
     if (success) {
-      selectedFile = file;
+      const { file: loadedFile } = await ajax("/api/editor/file", {
+        method: "POST",
+        body: JSON.stringify({ name: file.name }),
+        background: true
+      });
+      selectedFile = { ...file, content: loadedFile.content };
     }
   }
 
