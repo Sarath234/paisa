@@ -25,7 +25,7 @@ type LedgerFile struct {
 	Operation string   `json:"operation"`
 }
 
-func GetFiles(db *gorm.DB) gin.H {
+func GetFiles(db *gorm.DB, metadataOnly bool) gin.H {
 	var accounts []string
 	var payees []string
 	var commodities []string
@@ -40,7 +40,11 @@ func GetFiles(db *gorm.DB) gin.H {
 	paths, _ := doublestar.FilepathGlob(dir + "/**/*" + filepath.Ext(path))
 
 	for _, path = range paths {
-		files = append(files, readLedgerFileWithVersions(dir, path))
+		if metadataOnly {
+			files = append(files, readLedgerFileMetadata(dir, path))
+		} else {
+			files = append(files, readLedgerFileWithVersions(dir, path))
+		}
 	}
 
 	return gin.H{"files": files, "accounts": accounts, "payees": payees, "commodities": commodities}
@@ -156,6 +160,19 @@ func validateFile(file LedgerFile) ([]ledger.LedgerFileError, string, error) {
 
 	return ledger.Cli().ValidateFile(tmpfile.Name())
 }
+
+func readLedgerFileMetadata(dir string, path string) *LedgerFile {
+	versions, _ := filepath.Glob(filepath.Join(filepath.Dir(path), filepath.Base(path)+".backup.*"))
+	versionPaths := lo.Map(versions, func(p string, _ int) string {
+		name, _ := filepath.Rel(dir, p)
+		return name
+	})
+	sort.Sort(sort.Reverse(sort.StringSlice(versionPaths)))
+
+	name, _ := filepath.Rel(dir, path)
+	return &LedgerFile{Name: name, Versions: versionPaths}
+}
+
 
 func pruneOldBackups(filePath string, maxBackups int) {
 	backups, _ := filepath.Glob(filePath + ".backup.*")

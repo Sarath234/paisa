@@ -233,7 +233,8 @@ func Build(db *gorm.DB, enableCompression bool) *gin.Engine {
 	})
 
 	router.GET("/api/editor/files", func(c *gin.Context) {
-		c.JSON(200, GetFiles(db))
+		metadataOnly := c.Query("metadata_only") == "true"
+		c.JSON(200, GetFiles(db, metadataOnly))
 	})
 
 	router.POST("/api/editor/file", func(c *gin.Context) {

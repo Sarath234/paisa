@@ -686,7 +686,7 @@ export function ajax(
 ): Promise<{ success: boolean; message?: string }>;
 
 export function ajax(
-  route: "/api/editor/files",
+  route: "/api/editor/files" | "/api/editor/files?metadata_only=true",
   options?: RequestOptions
 ): Promise<{
   files: LedgerFile[];
