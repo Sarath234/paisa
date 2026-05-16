@@ -28,6 +28,7 @@
   let z: d3.ScaleOrdinal<string, string, never>,
     renderer: (ps: Posting[]) => void,
     expenses: Posting[],
+    forecastExpenses: Posting[] = [],
     grouped_expenses: Record<string, Posting[]>,
     grouped_incomes: Record<string, Posting[]>,
     grouped_investments: Record<string, Posting[]>,
@@ -35,6 +36,13 @@
     destroy: () => void;
 
   let legends: Legend[] = [];
+
+  $: historicalForecastCount = _.uniqBy(
+    forecastExpenses.filter((p) => p.forecast && p.note === "historical"),
+    (p) => p.account
+  ).length;
+
+  let nudgeDismissed = false;
 
   let taxRate = "",
     netIncome = "",
@@ -92,18 +100,21 @@
   });
 
   onMount(async () => {
-    ({
-      expenses: expenses,
-      month_wise: {
-        expenses: grouped_expenses,
-        incomes: grouped_incomes,
-        investments: grouped_investments,
-        taxes: grouped_taxes
-      }
-    } = await ajax("/api/expense"));
+    const result = await ajax("/api/expense");
+    expenses = result.expenses;
+    forecastExpenses = result.forecast_expenses || [];
+    grouped_expenses = result.month_wise.expenses;
+    grouped_incomes = result.month_wise.incomes;
+    grouped_investments = result.month_wise.investments;
+    grouped_taxes = result.month_wise.taxes;
 
     setAllowedDateRange(_.map(expenses, (e) => e.date));
-    ({ z, destroy, legends } = renderMonthlyExpensesTimeline(expenses, groups, month, dateRange));
+    ({ z, destroy, legends } = renderMonthlyExpensesTimeline(
+      [...expenses, ...forecastExpenses],
+      groups,
+      month,
+      dateRange
+    ));
     renderer = renderCurrentExpensesBreakdown(z);
   });
 
@@ -198,6 +209,24 @@
               </ZeroState>
               <LegendCard {legends} clazz="ml-4 overflow-x-auto" />
               <svg id="d3-monthly-expense-timeline" width="100%" height="400" />
+              {#if historicalForecastCount > 0 && !nudgeDismissed}
+                <div
+                  class="notification is-info is-light mt-3"
+                  style="display:flex;align-items:center;justify-content:space-between"
+                >
+                  <span>
+                    {historicalForecastCount} expense
+                    {historicalForecastCount === 1 ? "category is" : "categories are"} estimated from
+                    your 3-month average.
+                    <a href="/expense/budget">Set budgets →</a> to improve forecast accuracy.
+                  </span>
+                  <button
+                    class="delete"
+                    aria-label="dismiss"
+                    on:click={() => (nudgeDismissed = true)}
+                  />
+                </div>
+              {/if}
             </div>
           </div>
         </div>

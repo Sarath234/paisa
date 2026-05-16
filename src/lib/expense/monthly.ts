@@ -159,6 +159,29 @@ export function renderMonthlyExpensesTimeline(
 
   const z = generateColorScheme(groups);
 
+  const hatchIds = _.fromPairs(
+    groups.map((group) => [group, `hatch-${_.uniqueId()}-${group.replace(/[^a-zA-Z0-9]/g, "-")}`])
+  );
+  const defs = svg.append("defs");
+  groups.forEach((group) => {
+    const pattern = defs
+      .append("pattern")
+      .attr("id", hatchIds[group])
+      .attr("patternUnits", "userSpaceOnUse")
+      .attr("width", 6)
+      .attr("height", 6)
+      .attr("patternTransform", "rotate(45)");
+    pattern
+      .append("line")
+      .attr("x1", 0)
+      .attr("y1", 0)
+      .attr("x2", 0)
+      .attr("y2", 6)
+      .style("stroke", z(group))
+      .style("stroke-width", "2")
+      .style("opacity", "0.5");
+  });
+
   const [start, end] = d3.extent(_.map(postings, (p) => p.date));
 
   if (!start) {
@@ -200,16 +223,19 @@ export function renderMonthlyExpensesTimeline(
   interface Point {
     month: string;
     timestamp: Dayjs;
-    [key: string]: number | string | Dayjs;
+    isForecast: boolean;
+    postings: Posting[];
+    [key: string]: number | string | Dayjs | boolean | Posting[];
   }
 
   const points: Point[] = [];
 
   forEachMonth(start, end, (month) => {
-    const postings = ms[month.format(timeFormat)] || [];
-    const values = _.chain(postings)
+    const monthPostings = ms[month.format(timeFormat)] || [];
+    const isForecast = monthPostings.length > 0 && monthPostings.every((p) => p.forecast);
+    const values = _.chain(monthPostings)
       .groupBy(expenseGroup)
-      .map((postings, key) => [key, _.sum(_.map(postings, (p) => p.amount))])
+      .map((ps, key) => [key, _.sum(_.map(ps, (p) => p.amount))])
       .fromPairs()
       .value();
 
@@ -218,7 +244,8 @@ export function renderMonthlyExpensesTimeline(
         {
           timestamp: month,
           month: month.format(timeFormat),
-          postings: postings,
+          postings: monthPostings,
+          isForecast: isForecast,
           trend: {}
         },
         defaultValues,
@@ -232,6 +259,28 @@ export function renderMonthlyExpensesTimeline(
 
   const tooltipContent = (allowedGroups: string[]) => {
     return (d: d3.SeriesPoint<Record<string, number>>) => {
+      const point = d.data as any;
+      const monthLabel = (point.timestamp as Dayjs).format("MMM YYYY");
+
+      if (point.isForecast) {
+        const forecastPostings: Posting[] = ((point.postings as Posting[]) || []).filter((p) =>
+          allowedGroups.includes(expenseGroup(p))
+        );
+        const grandTotal = _.sumBy(forecastPostings, (p) => p.amount);
+        return tooltip(
+          forecastPostings.map((p) => [
+            iconify(expenseGroup(p), { group: "Expenses" }),
+            [
+              formatCurrency(p.amount) +
+                " " +
+                (p.note === "budget" ? "(budget)" : "(est. 3mo avg)"),
+              "has-text-weight-bold has-text-right"
+            ]
+          ]),
+          { total: formatCurrency(grandTotal), header: `Projected · ${monthLabel}` }
+        );
+      }
+
       let grandTotal = 0;
       return tooltip(
         _.flatMap(allowedGroups, (key) => {
@@ -247,7 +296,7 @@ export function renderMonthlyExpensesTimeline(
           }
           return [];
         }),
-        { total: formatCurrency(grandTotal), header: (d.data.timestamp as any).format("MMM YYYY") }
+        { total: formatCurrency(grandTotal), header: monthLabel }
       );
     };
   };
@@ -352,6 +401,23 @@ export function renderMonthlyExpensesTimeline(
               monthStore.set(timestamp.format("YYYY-MM"));
             })
             .attr("data-tippy-content", tooltipContent(allowedGroups))
+            .attr("fill", function (d) {
+              if ((d.data as any).isForecast) {
+                const key = (d3.select((this as Element).parentNode as Element).datum() as any).key;
+                return `url(#${hatchIds[key]})`;
+              }
+              return null;
+            })
+            .attr("stroke", function (d) {
+              if ((d.data as any).isForecast) {
+                const key = (d3.select((this as Element).parentNode as Element).datum() as any).key;
+                return z(key);
+              }
+              return null;
+            })
+            .attr("stroke-dasharray", function (d) {
+              return (d.data as any).isForecast ? "3,2" : null;
+            })
             .attr("x", function (d) {
               return (
                 x((d.data as any).month) +
@@ -370,6 +436,23 @@ export function renderMonthlyExpensesTimeline(
         (update) =>
           update
             .attr("data-tippy-content", tooltipContent(allowedGroups))
+            .attr("fill", function (d) {
+              if ((d.data as any).isForecast) {
+                const key = (d3.select((this as Element).parentNode as Element).datum() as any).key;
+                return `url(#${hatchIds[key]})`;
+              }
+              return null;
+            })
+            .attr("stroke", function (d) {
+              if ((d.data as any).isForecast) {
+                const key = (d3.select((this as Element).parentNode as Element).datum() as any).key;
+                return z(key);
+              }
+              return null;
+            })
+            .attr("stroke-dasharray", function (d) {
+              return (d.data as any).isForecast ? "3,2" : null;
+            })
             .transition(t)
             .attr("width", Math.min(x.bandwidth(), MAX_BAR_WIDTH))
             .attr("x", function (d) {

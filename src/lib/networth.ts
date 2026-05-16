@@ -24,10 +24,12 @@ function investment(d: Networth) {
 
 export function renderNetworth(
   points: Networth[],
+  forecastPoints: Networth[],
   element: Element
 ): { destroy: () => void; legends: Legend[] } {
-  const start = _.min(_.map(points, (p) => p.date)),
-    end = now();
+  const start = _.min(_.map(points, (p) => p.date));
+  const today = now();
+  const end = forecastPoints.length > 0 ? _.last(forecastPoints).date : today;
 
   const svg = d3.select(element);
 
@@ -218,6 +220,91 @@ export function renderNetworth(
       t.hide();
       hoverCircle.attr("fill", "none");
     });
+
+  if (forecastPoints.length > 0) {
+    const lastActual = _.last(points);
+    const lastActualValue = lastActual ? networth(lastActual) : 0;
+    const bandWidth = Math.abs(lastActualValue) * 0.1;
+
+    const forecastValues = _.map(forecastPoints, (p) => networth(p));
+    const upperBand = _.map(forecastPoints, (p) => ({ ...p, v: networth(p) + bandWidth }));
+    const lowerBand = _.map(forecastPoints, (p) => ({ ...p, v: networth(p) - bandWidth }));
+
+    const bandPath =
+      upperBand.map((p, i) => `${i === 0 ? "M" : "L"}${x(p.date)},${y(p.v)}`).join(" ") +
+      " " +
+      lowerBand
+        .slice()
+        .reverse()
+        .map((p) => `L${x(p.date)},${y(p.v)}`)
+        .join(" ") +
+      " Z";
+
+    g.append("path")
+      .attr("d", bandPath)
+      .style("fill", COLORS.primary)
+      .style("opacity", "0.08")
+      .style("pointer-events", "none");
+
+    const forecastLine = forecastPoints
+      .map((p, i) => `${i === 0 ? "M" : "L"}${x(p.date)},${y(networth(p))}`)
+      .join(" ");
+    const lastActualX = lastActual ? x(lastActual.date) : x(today);
+    const lastActualY = lastActual ? y(networth(lastActual)) : y(0);
+    const fullForecastLine = `M${lastActualX},${lastActualY} ${forecastLine}`;
+
+    g.append("path")
+      .attr("d", fullForecastLine)
+      .style("stroke", COLORS.primary)
+      .style("stroke-width", "2")
+      .style("stroke-dasharray", "6,4")
+      .style("opacity", "0.5")
+      .style("fill", "none")
+      .style("pointer-events", "none");
+
+    g.append("line")
+      .attr("x1", x(today))
+      .attr("x2", x(today))
+      .attr("y1", 0)
+      .attr("y2", height)
+      .style("stroke", "#6b7280")
+      .style("stroke-width", "1")
+      .style("stroke-dasharray", "3,3")
+      .style("pointer-events", "none");
+
+    const forecastCircles = g
+      .selectAll(".forecast-circle")
+      .data(forecastPoints)
+      .enter()
+      .append("circle")
+      .attr("class", "forecast-circle")
+      .attr("r", 3)
+      .attr("cx", (p) => x(p.date))
+      .attr("cy", (p) => y(networth(p)))
+      .style("fill", COLORS.primary)
+      .style("opacity", "0.4")
+      .style("cursor", "pointer");
+
+    const tForecast = tippy(forecastCircles.nodes()[0], {
+      theme: "light",
+      delay: 0,
+      allowHTML: true
+    });
+
+    forecastCircles
+      .on("mouseover", (_, d) => {
+        tForecast.setProps({
+          content: tooltip([
+            ["Projected", d.date.format("MMM YYYY")],
+            ["Net Worth", [formatCurrency(networth(d)), "has-text-weight-bold has-text-right"]]
+          ])
+        });
+        tForecast.show();
+      })
+      .on("mouseout", () => {
+        tForecast.hide();
+      });
+  }
 
   const legends: Legend[] = [
     {
