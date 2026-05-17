@@ -11,13 +11,15 @@
   } from "../../persisted_store";
   import _ from "lodash";
   import { financialYear, forEachFinancialYear, helpUrl, isMobile, now } from "$lib/utils";
-  import { onMount } from "svelte";
+  import { createEventDispatcher, onMount } from "svelte";
   import { get } from "svelte/store";
   import DateRange from "./DateRange.svelte";
   import ThemeSwitcher from "./ThemeSwitcher.svelte";
   import MonthPicker from "./MonthPicker.svelte";
   import Logo from "./Logo.svelte";
   import InputRange from "./InputRange.svelte";
+
+  const dispatch = createEventDispatcher();
   export let isBurger: boolean = null;
   const readonly = USER_CONFIG.readonly;
 
@@ -300,6 +302,16 @@
                 class="mt-1 tag is-rounded is-danger is-light invertable"
                 data-tippy-content="<p>Paisa is in readonly mode</p>">readonly</span
               >
+            </p>
+          {:else}
+            <p class="control">
+              <button
+                class="button is-small is-rounded"
+                data-tippy-content="<p>Add transaction (N)</p>"
+                on:click={() => dispatch("quickentry")}
+              >
+                <span class="icon is-small"><i class="fas fa-plus" /></span>
+              </button>
             </p>
           {/if}
 
