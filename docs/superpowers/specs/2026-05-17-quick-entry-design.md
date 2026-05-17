@@ -23,8 +23,8 @@ No backend changes required. All existing endpoints are sufficient.
 |-------|-----------|
 | **File picker** | Dropdown of all journal files shown as full relative paths (e.g. `202605/transactions.ledger`). Sorted by most recent backup timestamp descending. |
 | **Date** | Text input, pre-filled with today in `YYYY/MM/DD`. Editable. |
-| **Payee** | Text input + `<datalist>` autocomplete from payees array. |
-| **Posting rows** | Start with 2 rows. Each row: account field (text + `<datalist>` from accounts), amount field (free text, e.g. `5000 INR`), remove button (visible only when > 2 rows). |
+| **Payee** | `svelte-select` searchable dropdown from payees array. Supports typing a new payee not in the list. |
+| **Posting rows** | Start with 2 rows. Each row: account field (`svelte-select` searchable dropdown from accounts, supports new account), amount field (free text, e.g. `5000 INR`), remove button (visible only when > 2 rows). |
 | **Add posting** | Link below rows; appends a new empty posting row. |
 
 The last posting's amount may be left blank — ledger infers the balance automatically.
@@ -70,7 +70,7 @@ A blank line is prepended before the transaction block when appending to the fil
 ### On modal open
 1. `GET /api/editor/files?metadata_only=true` — returns file list with `versions[]`. (Lightweight; no file content.)
 2. Sort files by recency, apply default selection logic.
-3. Populate `<datalist>` elements for payees and accounts.
+3. Populate payees and accounts arrays into `svelte-select` components for payee and account fields.
 
 ### On Save
 1. Build transaction string from form, run through `format()`.
