@@ -168,3 +168,18 @@ export function focus(editor: EditorView, retry = 5) {
     }
   }
 }
+
+export async function appendTransaction(filename: string, transactionText: string): Promise<void> {
+  const { file } = await ajax("/api/editor/file", {
+    method: "POST",
+    body: JSON.stringify({ name: filename })
+  });
+  const newContent = file.content.trimEnd() + "\n\n" + transactionText + "\n";
+  const result = await ajax("/api/editor/save", {
+    method: "POST",
+    body: JSON.stringify({ name: filename, content: newContent, operation: "overwrite" })
+  });
+  if (!result.saved) {
+    throw new Error(result.message || "Failed to save");
+  }
+}
