@@ -1757,6 +1757,51 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#enhancement-8-global-transaction-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      Enhancement 8 — Global Transaction Search
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#enhancement-9-spending-insights-feed" class="md-nav__link">
+    <span class="md-ellipsis">
+      Enhancement 9 — Spending Insights Feed
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#enhancement-10-multiple-financial-goals-with-projections" class="md-nav__link">
+    <span class="md-ellipsis">
+      Enhancement 10 — Multiple Financial Goals with Projections
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#enhancement-11-credit-card-spend-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      Enhancement 11 — Credit Card Spend Analysis
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#enhancement-12-doctor-page-triage" class="md-nav__link">
+    <span class="md-ellipsis">
+      Enhancement 12 — Doctor Page Triage
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1836,6 +1881,31 @@
 <p>Attach receipts/PDFs to transactions via ledger comment directives (<code>; attachment: receipts/file.pdf</code>). Editor shows paperclip icon; Paisa serves the file.</p>
 <p><strong>Files:</strong> <code>internal/ledger/ledger.go</code> (parse <code>; attachment:</code> directives), <code>internal/server/editor.go</code> (add <code>GET /api/attachment/:path</code>), <code>src/routes/(app)/ledger/editor/[slug]/+page.svelte</code></p>
 <hr />
+<h3 id="enhancement-8-global-transaction-search">Enhancement 8 — Global Transaction Search<a class="headerlink" href="#enhancement-8-global-transaction-search" title="Permanent link">&para;</a></h3>
+<p><strong>Priority:</strong> 8/10 | Complexity: Low | Impact: High</p>
+<p>Full-text search across transactions by payee, account, amount, or note. A search bar in the nav that jumps to a filtered transaction list. SQLite FTS5 or simple LIKE query on the postings table is sufficient.</p>
+<p><strong>Files:</strong> <code>internal/server/search.go</code> (new — <code>GET /api/search?q=</code>), <code>src/routes/(app)/search/+page.svelte</code> (new), <code>src/lib/components/NavSearch.svelte</code> (new)</p>
+<hr />
+<h3 id="enhancement-9-spending-insights-feed">Enhancement 9 — Spending Insights Feed<a class="headerlink" href="#enhancement-9-spending-insights-feed" title="Permanent link">&para;</a></h3>
+<p><strong>Priority:</strong> 7/10 | Complexity: Medium | Impact: High</p>
+<p>Weekly/monthly auto-generated plain-English observations: "You spent ₹X on Y this month — Z% more than last month", "Your savings rate this month is N% — above your 6-month average." Renders as a card feed on the dashboard or a dedicated Insights page. All underlying data is already available.</p>
+<p><strong>Files:</strong> <code>internal/server/insights.go</code> (new — generate observation structs), <code>src/routes/(app)/insights/+page.svelte</code> (new) or dashboard widget</p>
+<hr />
+<h3 id="enhancement-10-multiple-financial-goals-with-projections">Enhancement 10 — Multiple Financial Goals with Projections<a class="headerlink" href="#enhancement-10-multiple-financial-goals-with-projections" title="Permanent link">&para;</a></h3>
+<p><strong>Priority:</strong> 7/10 | Complexity: High | Impact: High</p>
+<p>Expand the single Retirement goal to support multiple goals (home down payment, emergency fund, education, etc.) each with a target amount, target date, and linked account. Show "at your current savings rate, you'll reach this in X years", projected corpus chart, and monthly contribution recommendation.</p>
+<p><strong>Files:</strong> <code>internal/config/config.go</code> (add <code>Goals[]</code>), <code>internal/server/goals.go</code> (new projection math), <code>src/routes/(app)/more/goals/+page.svelte</code> (rewrite)</p>
+<hr />
+<h3 id="enhancement-11-credit-card-spend-analysis">Enhancement 11 — Credit Card Spend Analysis<a class="headerlink" href="#enhancement-11-credit-card-spend-analysis" title="Permanent link">&para;</a></h3>
+<p><strong>Priority:</strong> 6/10 | Complexity: Low | Impact: Medium</p>
+<p>Per-card monthly spend breakdown and category split on the Credit Cards page. Answers "which card is used for what?" and shows rewards-earned vs interest-paid summary. Data already flows through postings — needs aggregation and a chart.</p>
+<p><strong>Files:</strong> <code>internal/server/liabilities/credit_cards.go</code> (add category breakdown query), <code>src/routes/(app)/liabilities/credit_cards/+page.svelte</code> (add breakdown panel)</p>
+<hr />
+<h3 id="enhancement-12-doctor-page-triage">Enhancement 12 — Doctor Page Triage<a class="headerlink" href="#enhancement-12-doctor-page-triage" title="Permanent link">&para;</a></h3>
+<p><strong>Priority:</strong> 5/10 | Complexity: Low | Impact: Medium</p>
+<p>Group the flat list of 600+ issues by type (negative balance, missing commodity price, unbalanced transaction), add severity levels (error vs warning), and add a "Fix this" guided action where automation is possible. The current flat card dump is overwhelming.</p>
+<p><strong>Files:</strong> <code>internal/server/doctor.go</code> (add type + severity classification), <code>src/routes/(app)/more/doctor/+page.svelte</code> (grouped view with severity badges)</p>
+<hr />
 <h2 id="closed-done">Closed / Done<a class="headerlink" href="#closed-done" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1895,6 +1965,16 @@
 <td>Enh 2</td>
 <td>Cash Flow Forecasting</td>
 <td>Built (spec + plan + code), PR #5/#6 closed — not in master</td>
+</tr>
+<tr>
+<td>Enh 6</td>
+<td>Quick Transaction Entry</td>
+<td><code>feat/quick-entry</code> merged to master; advanced features (OCR, voice, category prediction) deferred</td>
+</tr>
+<tr>
+<td>Enh 7</td>
+<td>Savings Rate Dashboard Widget</td>
+<td>merged to master, tagged <code>v0.7.6</code></td>
 </tr>
 </tbody>
 </table>
