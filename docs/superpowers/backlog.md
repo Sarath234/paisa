@@ -69,6 +69,52 @@ Attach receipts/PDFs to transactions via ledger comment directives (`; attachmen
 
 ---
 
+
+### Enhancement 8 — Global Transaction Search
+**Priority:** 8/10 | Complexity: Low | Impact: High
+
+Full-text search across transactions by payee, account, amount, or note. A search bar in the nav that jumps to a filtered transaction list. SQLite FTS5 or simple LIKE query on the postings table is sufficient.
+
+**Files:** `internal/server/search.go` (new — `GET /api/search?q=`), `src/routes/(app)/search/+page.svelte` (new), `src/lib/components/NavSearch.svelte` (new)
+
+---
+
+### Enhancement 9 — Spending Insights Feed
+**Priority:** 7/10 | Complexity: Medium | Impact: High
+
+Weekly/monthly auto-generated plain-English observations: "You spent ₹X on Y this month — Z% more than last month", "Your savings rate this month is N% — above your 6-month average." Renders as a card feed on the dashboard or a dedicated Insights page. All underlying data is already available.
+
+**Files:** `internal/server/insights.go` (new — generate observation structs), `src/routes/(app)/insights/+page.svelte` (new) or dashboard widget
+
+---
+
+### Enhancement 10 — Multiple Financial Goals with Projections
+**Priority:** 7/10 | Complexity: High | Impact: High
+
+Expand the single Retirement goal to support multiple goals (home down payment, emergency fund, education, etc.) each with a target amount, target date, and linked account. Show "at your current savings rate, you'll reach this in X years", projected corpus chart, and monthly contribution recommendation.
+
+**Files:** `internal/config/config.go` (add `Goals[]`), `internal/server/goals.go` (new projection math), `src/routes/(app)/more/goals/+page.svelte` (rewrite)
+
+---
+
+### Enhancement 11 — Credit Card Spend Analysis
+**Priority:** 6/10 | Complexity: Low | Impact: Medium
+
+Per-card monthly spend breakdown and category split on the Credit Cards page. Answers "which card is used for what?" and shows rewards-earned vs interest-paid summary. Data already flows through postings — needs aggregation and a chart.
+
+**Files:** `internal/server/liabilities/credit_cards.go` (add category breakdown query), `src/routes/(app)/liabilities/credit_cards/+page.svelte` (add breakdown panel)
+
+---
+
+### Enhancement 12 — Doctor Page Triage
+**Priority:** 5/10 | Complexity: Low | Impact: Medium
+
+Group the flat list of 600+ issues by type (negative balance, missing commodity price, unbalanced transaction), add severity levels (error vs warning), and add a "Fix this" guided action where automation is possible. The current flat card dump is overwhelming.
+
+**Files:** `internal/server/doctor.go` (add type + severity classification), `src/routes/(app)/more/doctor/+page.svelte` (grouped view with severity badges)
+
+---
+
 ## Closed / Done
 
 | # | Item | Notes |
@@ -83,3 +129,5 @@ Attach receipts/PDFs to transactions via ledger comment directives (`; attachmen
 | Perf 11 | Editor save slowness (iCloud eviction) | User pinned folder offline; PR #4 pruned backups |
 | Enh 1 | Smart Import Rules Engine | Built (spec + plan + code), PR #3 closed — not in master |
 | Enh 2 | Cash Flow Forecasting | Built (spec + plan + code), PR #5/#6 closed — not in master |
+| Enh 6 | Quick Transaction Entry | `feat/quick-entry` merged to master; advanced features (OCR, voice, category prediction) deferred |
+| Enh 7 | Savings Rate Dashboard Widget | merged to master, tagged `v0.7.6` |
