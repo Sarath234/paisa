@@ -58,28 +58,22 @@
     totalExpense = _.sumBy(selectedExpenses, (p) => p.amount);
   }
 
-  // Savings rate: current month, falling back to last month with income if salary hasn't arrived yet.
-  // "Salary arrived" = current month income >= 50% of average prior monthly income,
-  // guarding against small mid-month income (interest, dividends) inflating the denominator.
+  // Savings rate: current month if salary has arrived, otherwise last complete month.
+  // "Salary arrived" = any transaction this month has a posting whose account contains "salary" (case-insensitive).
+  $: _salaryThisMonth = transactions.some(
+    (t) =>
+      t.date.format("YYYY-MM") === now().format("YYYY-MM") &&
+      t.postings.some((p) => p.account.toLowerCase().includes("salary"))
+  );
   $: _srSource = (() => {
     const currentMonthStr = now().format("YYYY-MM");
     const sorted = _.sortBy(cashFlows, (cf) => cf.date.valueOf());
     const prevWithIncome = sorted.filter(
       (cf) => cf.date.format("YYYY-MM") !== currentMonthStr && cf.income > 0
     );
-    const avgIncome =
-      prevWithIncome.length > 0
-        ? _.sumBy(prevWithIncome, (cf) => cf.income) / prevWithIncome.length
-        : 0;
-
     const current = cashFlows.find((cf) => cf.date.format("YYYY-MM") === currentMonthStr);
-    const salaryArrived =
-      current !== undefined &&
-      current.income > 0 &&
-      (avgIncome === 0 || current.income >= avgIncome * 0.5);
-
-    if (salaryArrived) {
-      return { cf: current!, title: "Savings Rate" };
+    if (_salaryThisMonth && current) {
+      return { cf: current, title: "Savings Rate" };
     }
     const prev = _.findLast(prevWithIncome);
     return prev
