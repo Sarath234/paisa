@@ -60,9 +60,7 @@
 
   // Savings rate: current month
   $: currentSavingsRate = (() => {
-    const current = cashFlows.find(
-      (cf) => cf.date.format("YYYY-MM") === now().format("YYYY-MM")
-    );
+    const current = cashFlows.find((cf) => cf.date.format("YYYY-MM") === now().format("YYYY-MM"));
     if (!current || current.income === 0) return null;
     return ((current.income - current.expenses) / current.income) * 100;
   })();
@@ -244,11 +242,7 @@
                         color={savingsRateColor}
                         value={savingsRateLabel}
                       />
-                      <LevelItem
-                        narrow
-                        title="12m Avg"
-                        value={avg12mLabel}
-                      />
+                      <LevelItem narrow title="12m Avg" value={avg12mLabel} />
                     </nav>
                   {/if}
                 </div>
