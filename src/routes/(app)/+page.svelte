@@ -58,6 +58,54 @@
     totalExpense = _.sumBy(selectedExpenses, (p) => p.amount);
   }
 
+  // Savings rate: current month
+  $: currentSavingsRate = (() => {
+    const current = cashFlows.find(
+      (cf) => cf.date.format("YYYY-MM") === now().format("YYYY-MM")
+    );
+    if (!current || current.income === 0) return null;
+    return ((current.income - current.expenses) / current.income) * 100;
+  })();
+
+  // Savings rate: pooled 12-month average
+  $: avg12mSavingsRate = (() => {
+    const window = _.takeRight(cashFlows, 12);
+    const totalIncome = _.sumBy(window, (cf) => cf.income);
+    if (totalIncome === 0) return null;
+    const totalExpenses = _.sumBy(window, (cf) => cf.expenses);
+    return ((totalIncome - totalExpenses) / totalIncome) * 100;
+  })();
+
+  // Trend: up/down/neutral vs 12m avg
+  $: savingsTrend = (() => {
+    if (currentSavingsRate === null || avg12mSavingsRate === null || cashFlows.length < 2)
+      return "neutral" as const;
+    if (currentSavingsRate > avg12mSavingsRate) return "up" as const;
+    if (currentSavingsRate < avg12mSavingsRate) return "down" as const;
+    return "neutral" as const;
+  })();
+
+  // Display label for current month: "38.0% ↑" or "—"
+  $: savingsRateLabel = (() => {
+    if (currentSavingsRate === null) return "—";
+    const pct = `${currentSavingsRate.toFixed(1)}%`;
+    if (savingsTrend === "up") return `${pct} ↑`;
+    if (savingsTrend === "down") return `${pct} ↓`;
+    return pct;
+  })();
+
+  // Color for current month tile
+  $: savingsRateColor = (() => {
+    if (currentSavingsRate === null) return COLORS.primary;
+    if (currentSavingsRate < 0) return COLORS.lossText;
+    if (savingsTrend === "up") return COLORS.gainText;
+    if (savingsTrend === "down") return COLORS.lossText;
+    return COLORS.primary;
+  })();
+
+  // Display label for 12m avg: "32.5%" or "—"
+  $: avg12mLabel = avg12mSavingsRate !== null ? `${avg12mSavingsRate.toFixed(1)}%` : "—";
+
   async function initDemo() {
     await ajax("/api/init", { method: "POST" });
     refresh();
@@ -188,6 +236,19 @@
                       />
 
                       <LevelItem narrow title="XIRR" value={formatFloat(xirr)} />
+                    </nav>
+                    <nav class="level grid-2">
+                      <LevelItem
+                        narrow
+                        title="Savings Rate"
+                        color={savingsRateColor}
+                        value={savingsRateLabel}
+                      />
+                      <LevelItem
+                        narrow
+                        title="12m Avg"
+                        value={avg12mLabel}
+                      />
                     </nav>
                   {/if}
                 </div>
