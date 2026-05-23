@@ -58,12 +58,26 @@
     totalExpense = _.sumBy(selectedExpenses, (p) => p.amount);
   }
 
-  // Savings rate: current month
-  $: currentSavingsRate = (() => {
-    const current = cashFlows.find((cf) => cf.date.format("YYYY-MM") === now().format("YYYY-MM"));
-    if (!current || current.income === 0) return null;
-    return ((current.income - current.expenses) / current.income) * 100;
+  // Savings rate: current month, falling back to last month with income if salary hasn't arrived yet
+  $: _srSource = (() => {
+    const currentMonthStr = now().format("YYYY-MM");
+    const current = cashFlows.find((cf) => cf.date.format("YYYY-MM") === currentMonthStr);
+    if (current && current.income !== 0) {
+      return { cf: current, title: "Savings Rate" };
+    }
+    const prev = _.findLast(
+      _.sortBy(cashFlows, (cf) => cf.date.valueOf()),
+      (cf) => cf.date.format("YYYY-MM") !== currentMonthStr && cf.income !== 0
+    );
+    return prev
+      ? { cf: prev, title: prev.date.format("MMM") + " Rate" }
+      : { cf: null, title: "Savings Rate" };
   })();
+  $: currentSavingsRate =
+    _srSource.cf !== null
+      ? ((_srSource.cf.income - _srSource.cf.expenses) / _srSource.cf.income) * 100
+      : null;
+  $: savingsRateTitle = _srSource.title;
 
   // Savings rate: pooled 12-month average
   $: avg12mSavingsRate = (() => {
@@ -238,7 +252,7 @@
                     <nav class="level grid-2">
                       <LevelItem
                         narrow
-                        title="Savings Rate"
+                        title={savingsRateTitle}
                         color={savingsRateColor}
                         value={savingsRateLabel}
                       />
