@@ -9,7 +9,15 @@
   import LegendCard from "$lib/components/LegendCard.svelte";
   import Table from "$lib/components/Table.svelte";
   import { accountName, nonZeroCurrency } from "$lib/table_formatters";
-  import { ajax, formatPercentage, rem, type Aggregate, type Legend } from "$lib/utils";
+  import {
+    ajax,
+    formatCurrency,
+    formatPercentage,
+    rem,
+    type Aggregate,
+    type AllocationTarget,
+    type Legend
+  } from "$lib/utils";
   import _ from "lodash";
   import { onMount, tick } from "svelte";
   import type { ColumnDefinition, ProgressBarParams } from "tabulator-tables";
@@ -19,6 +27,26 @@
   let allocationTimelineLegends: Legend[] = [];
   let aggregateLeafNodes: Aggregate[] = [];
   let total = 0;
+  let allocationTargets: AllocationTarget[] = [];
+  let deposit = 0;
+
+  $: rebalanced = allocationTargets.map((at) => {
+    const currentAmount = _.sumBy(_.values(at.aggregates), (a) => a.market_amount);
+    const newTotal = total + deposit;
+    const targetAmount = newTotal * (at.target / 100);
+    const rawDelta = targetAmount - currentAmount;
+    const delta = Math.max(rawDelta, -currentAmount);
+    const currentPercent = total > 0 ? (currentAmount / total) * 100 : 0;
+    const tolerance = total * 0.005;
+    return {
+      name: at.name,
+      currentAmount,
+      currentPercent,
+      targetPercent: at.target,
+      delta,
+      tolerance
+    };
+  });
 
   const columns: ColumnDefinition[] = [
     { title: "Account", field: "account", formatter: accountName },
@@ -52,8 +80,9 @@
     const {
       aggregates: aggregates,
       aggregates_timeline: aggregatesTimeline,
-      allocation_targets: allocationTargets
+      allocation_targets: targets
     } = await ajax("/api/allocation");
+    allocationTargets = targets;
     const accounts = _.keys(aggregates);
     aggregateLeafNodes = _.filter(_.values(aggregates), (a) => a.market_amount > 0);
     total = _.sumBy(aggregateLeafNodes, (a) => a.market_amount);
@@ -131,5 +160,56 @@
       </div>
     </div>
     <BoxLabel text="Allocation Table" />
+  </div>
+</section>
+<section class="section tab-allocation" class:is-hidden={!showAllocation}>
+  <div class="container is-fluid">
+    <div class="columns">
+      <div class="column is-12">
+        <div class="box">
+          <div class="field mb-4" style="max-width: 320px">
+            <label class="label">Amount to invest (negative to withdraw)</label>
+            <div class="control">
+              <input class="input" type="number" bind:value={deposit} />
+            </div>
+          </div>
+          <table class="table is-fullwidth is-hoverable">
+            <thead>
+              <tr>
+                <th>Group</th>
+                <th class="has-text-right">Current</th>
+                <th class="has-text-right">Target</th>
+                <th class="has-text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each rebalanced as row}
+                <tr>
+                  <td>{row.name}</td>
+                  <td class="has-text-right">
+                    {formatCurrency(row.currentAmount)}
+                    <span class="has-text-grey is-size-7"
+                      >({formatPercentage(row.currentPercent / 100, 1)})</span
+                    >
+                  </td>
+                  <td class="has-text-right">{formatPercentage(row.targetPercent / 100, 1)}</td>
+                  <td class="has-text-right">
+                    {#if Math.abs(row.delta) > row.tolerance}
+                      <span style="color: {row.delta > 0 ? COLORS.gainText : COLORS.lossText}">
+                        {row.delta > 0 ? "Buy" : "Sell"}
+                        {formatCurrency(Math.abs(row.delta))}
+                      </span>
+                    {:else}
+                      <span class="has-text-grey">—</span>
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <BoxLabel text="Rebalancing Calculator" />
   </div>
 </section>
