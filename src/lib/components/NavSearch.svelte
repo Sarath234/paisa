@@ -31,11 +31,17 @@
 </script>
 
 <input
-  class="input is-small"
+  class="input is-small nav-search"
   type="search"
   placeholder="Search transactions…"
-  style="width: 200px"
+  aria-label="Search transactions"
   {value}
   on:input={handleInput}
   on:keydown={handleKeydown}
 />
+
+<style>
+  .nav-search {
+    width: 200px;
+  }
+</style>
