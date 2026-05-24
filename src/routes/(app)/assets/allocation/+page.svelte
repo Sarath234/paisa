@@ -82,7 +82,7 @@
       aggregates_timeline: aggregatesTimeline,
       allocation_targets: targets
     } = await ajax("/api/allocation");
-    allocationTargets = targets;
+    allocationTargets = targets ?? [];
     const accounts = _.keys(aggregates);
     aggregateLeafNodes = _.filter(_.values(aggregates), (a) => a.market_amount > 0);
     total = _.sumBy(aggregateLeafNodes, (a) => a.market_amount);
