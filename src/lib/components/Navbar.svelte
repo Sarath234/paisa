@@ -15,6 +15,7 @@
   import { get } from "svelte/store";
   import DateRange from "./DateRange.svelte";
   import ThemeSwitcher from "./ThemeSwitcher.svelte";
+  import NavSearch from "$lib/components/NavSearch.svelte";
   import MonthPicker from "./MonthPicker.svelte";
   import Logo from "./Logo.svelte";
   import InputRange from "./InputRange.svelte";
@@ -315,6 +316,9 @@
             </p>
           {/if}
 
+          <p class="control">
+            <NavSearch />
+          </p>
           <p class="control">
             <ThemeSwitcher />
           </p>
