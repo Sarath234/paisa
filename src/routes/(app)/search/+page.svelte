@@ -43,13 +43,15 @@
       <p class="mb-3 has-text-grey is-size-7">
         <strong>{filtered.length}</strong> transaction(s) found
       </p>
-      <UntypedMasonryGrid gap={10} maxStretchColumnSize={500} align="stretch">
-        {#each filtered as t (t.id)}
-          <div class="mr-3 is-flex-grow-1">
-            <TransactionCard {t} />
-          </div>
-        {/each}
-      </UntypedMasonryGrid>
+      {#key q}
+        <UntypedMasonryGrid gap={10} maxStretchColumnSize={500} align="stretch">
+          {#each filtered as t (t.id)}
+            <div class="mr-3 is-flex-grow-1">
+              <TransactionCard {t} />
+            </div>
+          {/each}
+        </UntypedMasonryGrid>
+      {/key}
     {/if}
   </div>
 </section>
