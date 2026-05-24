@@ -6,9 +6,11 @@
   import Spinner from "$lib/components/Spinner.svelte";
   import Navbar from "$lib/components/Navbar.svelte";
   import QuickEntryModal from "$lib/components/QuickEntryModal.svelte";
+  import SearchModal from "$lib/components/SearchModal.svelte";
   import { willClearTippy, willRefresh } from "../../store";
 
   let quickEntryActive = false;
+  let searchActive = false;
 
   let isBurger: boolean = null;
 
@@ -60,11 +62,18 @@
 
   onMount(() => {
     function handleKeydown(e: KeyboardEvent) {
-      if (e.key === "n" || e.key === "N") {
-        const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-        if (tag === "input" || tag === "textarea" || tag === "select") return;
-        if ((e.target as HTMLElement)?.isContentEditable) return;
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      const isEditable =
+        tag === "input" ||
+        tag === "textarea" ||
+        tag === "select" ||
+        (e.target as HTMLElement)?.isContentEditable;
+      if ((e.key === "n" || e.key === "N") && !isEditable) {
         quickEntryActive = true;
+      }
+      if (e.key === "/" && !isEditable) {
+        e.preventDefault();
+        searchActive = true;
       }
     }
     window.addEventListener("keydown", handleKeydown);
@@ -73,9 +82,14 @@
 </script>
 
 <QuickEntryModal bind:active={quickEntryActive} />
+<SearchModal bind:active={searchActive} />
 
 {#key $willRefresh}
-  <Navbar bind:isBurger on:quickentry={() => (quickEntryActive = true)} />
+  <Navbar
+    bind:isBurger
+    on:quickentry={() => (quickEntryActive = true)}
+    on:search={() => (searchActive = true)}
+  />
 
   <Spinner>
     <slot />

@@ -1,47 +1,12 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
-  import { page } from "$app/stores";
-  import _ from "lodash";
-
-  let value = "";
-
-  // Keep input in sync when navigating with browser back/forward
-  $: {
-    const q = $page.url.searchParams.get("q") ?? "";
-    if (q !== value) value = q;
-  }
-
-  const debouncedNavigate = _.debounce((q: string) => {
-    const url = q ? `/search?q=${encodeURIComponent(q)}` : "/search";
-    goto(url, { replaceState: true, keepFocus: true });
-  }, 300);
-
-  function handleInput(e: Event) {
-    value = (e.target as HTMLInputElement).value;
-    debouncedNavigate(value);
-  }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") {
-      value = "";
-      debouncedNavigate.cancel();
-      goto("/search", { replaceState: true, keepFocus: true });
-    }
-  }
+  import { createEventDispatcher } from "svelte";
+  const dispatch = createEventDispatcher();
 </script>
 
-<input
-  class="input is-small nav-search"
-  type="search"
-  placeholder="Search transactions…"
-  aria-label="Search transactions"
-  {value}
-  on:input={handleInput}
-  on:keydown={handleKeydown}
-/>
-
-<style>
-  .nav-search {
-    width: 200px;
-  }
-</style>
+<button
+  class="button is-small is-rounded"
+  data-tippy-content="<p>Search transactions (/)</p>"
+  on:click={() => dispatch("search")}
+>
+  <span class="icon is-small"><i class="fas fa-search" /></span>
+</button>

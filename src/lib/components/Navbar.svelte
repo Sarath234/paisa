@@ -317,7 +317,7 @@
           {/if}
 
           <p class="control">
-            <NavSearch />
+            <NavSearch on:search={() => dispatch("search")} />
           </p>
           <p class="control">
             <ThemeSwitcher />
