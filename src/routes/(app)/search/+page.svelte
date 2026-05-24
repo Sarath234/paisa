@@ -2,11 +2,8 @@
   import { page } from "$app/stores";
   import { ajax, type Transaction } from "$lib/utils";
   import TransactionCard from "$lib/components/TransactionCard.svelte";
-  import { MasonryGrid } from "@egjs/svelte-grid";
-  import _ from "lodash";
   import { onMount } from "svelte";
 
-  let UntypedMasonryGrid = MasonryGrid as any;
   let transactions: Transaction[] = [];
   let loaded = false;
 
@@ -43,15 +40,24 @@
       <p class="mb-3 has-text-grey is-size-7">
         <strong>{filtered.length}</strong> transaction(s) found
       </p>
-      {#key q}
-        <UntypedMasonryGrid gap={10} maxStretchColumnSize={500} align="stretch">
-          {#each filtered as t (t.id)}
-            <div class="mr-3 is-flex-grow-1">
-              <TransactionCard {t} />
-            </div>
-          {/each}
-        </UntypedMasonryGrid>
-      {/key}
+      <div class="search-results">
+        {#each filtered as t (t.id)}
+          <TransactionCard {t} />
+        {/each}
+      </div>
     {/if}
   </div>
 </section>
+
+<style>
+  .search-results {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .search-results :global(.box) {
+    flex: 1 1 300px;
+    max-width: 500px;
+  }
+</style>
