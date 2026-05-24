@@ -37,7 +37,7 @@
     const rawDelta = targetAmount - currentAmount;
     const delta = Math.max(rawDelta, -currentAmount);
     const currentPercent = total > 0 ? (currentAmount / total) * 100 : 0;
-    const tolerance = total * 0.005;
+    const tolerance = total > 0 ? Math.max(total * 0.005, 1) : 0;
     return {
       name: at.name,
       currentAmount,
@@ -170,7 +170,7 @@
           <div class="field mb-4" style="max-width: 320px">
             <label class="label">Amount to invest (negative to withdraw)</label>
             <div class="control">
-              <input class="input" type="number" bind:value={deposit} />
+              <input class="input" type="number" step="1" bind:value={deposit} />
             </div>
           </div>
           <table class="table is-fullwidth is-hoverable">
