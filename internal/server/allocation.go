@@ -145,7 +145,9 @@ func computeAggregate(db *gorm.DB, postings []posting.Posting, date time.Time) m
 		for _, part := range strings.Split(account, ":") {
 			parts = append(parts, part)
 			parent := strings.Join(parts, ":")
-			result[parent] = Aggregate{Account: parent}
+			if _, exists := result[parent]; !exists {
+				result[parent] = Aggregate{Account: parent}
+			}
 		}
 
 		marketAmount := accounting.CurrentBalanceOn(db, ps, date)
