@@ -30,23 +30,28 @@
   let allocationTargets: AllocationTarget[] = [];
   let deposit = 0;
 
-  $: rebalanced = allocationTargets.map((at) => {
-    const currentAmount = _.sumBy(_.values(at.aggregates), (a) => a.market_amount);
-    const newTotal = total + deposit;
-    const targetAmount = newTotal * (at.target / 100);
-    const rawDelta = targetAmount - currentAmount;
-    const delta = Math.max(rawDelta, -currentAmount);
-    const currentPercent = total > 0 ? (currentAmount / total) * 100 : 0;
-    const tolerance = total > 0 ? Math.max(total * 0.005, 1) : 0;
-    return {
-      name: at.name,
-      currentAmount,
-      currentPercent,
-      targetPercent: at.target,
-      delta,
-      tolerance
-    };
-  });
+  $: rebalanced = (() => {
+    const managedTotal = _.sumBy(allocationTargets, (at) =>
+      _.sumBy(_.values(at.aggregates), (a) => a.market_amount)
+    );
+    const newTotal = managedTotal + deposit;
+    const tolerance = managedTotal > 0 ? Math.max(managedTotal * 0.005, 1) : 0;
+    return allocationTargets.map((at) => {
+      const currentAmount = _.sumBy(_.values(at.aggregates), (a) => a.market_amount);
+      const targetAmount = newTotal * (at.target / 100);
+      const rawDelta = targetAmount - currentAmount;
+      const delta = Math.max(rawDelta, -currentAmount);
+      const currentPercent = managedTotal > 0 ? (currentAmount / managedTotal) * 100 : 0;
+      return {
+        name: at.name,
+        currentAmount,
+        currentPercent,
+        targetPercent: at.target,
+        delta,
+        tolerance
+      };
+    });
+  })();
 
   const columns: ColumnDefinition[] = [
     { title: "Account", field: "account", formatter: accountName },
