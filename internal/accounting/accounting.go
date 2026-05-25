@@ -1,10 +1,10 @@
 package accounting
 
 import (
-	"sort"
-	"time"
-
 	"path/filepath"
+	"sort"
+	"strings"
+	"time"
 
 	"github.com/ananthakumaran/paisa/internal/model/posting"
 	"github.com/ananthakumaran/paisa/internal/model/transaction"
@@ -61,9 +61,15 @@ func FilterByGlob(postings []posting.Posting, accounts []string) []posting.Posti
 			if service.IsCapitalGains(p) {
 				account = service.CapitalGainsSourceAccount(p.Account)
 			}
-			match, err := filepath.Match(accountGlob, account)
-			if err != nil {
-				log.Fatal("Invalid account glob used for filtering", accountGlob, err)
+			var match bool
+			if strings.Contains(accountGlob, "*") {
+				var err error
+				match, err = filepath.Match(accountGlob, account)
+				if err != nil {
+					log.Fatal("Invalid account glob used for filtering", accountGlob, err)
+				}
+			} else {
+				match = utils.IsSameOrParent(account, accountGlob)
 			}
 
 			if negative {
