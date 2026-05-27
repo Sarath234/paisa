@@ -32,14 +32,18 @@ func GetInsights(db *gorm.DB) gin.H {
 	incomePostings := query.Init(db).Like("Income:%").LastNMonths(13).All()
 	forecastPostings := query.Init(db).Like("Expenses:%").Forecast().UntilThisMonthEnd().All()
 
+	// Use last month as the reference for income-based insights until the
+	// current month's salary arrives.
+	ref := effectiveMonth(incomePostings, now)
+
 	insights := []Insight{}
 	insights = append(insights, computeSpendCategory(expensePostings, now)...)
-	insights = append(insights, computeSavingsRate(append(incomePostings, expensePostings...), now))
+	insights = append(insights, computeSavingsRate(append(incomePostings, expensePostings...), ref))
 	insights = append(insights, computeBudgetInsights(forecastPostings, expensePostings, now)...)
 	if top := computeTopCategory(expensePostings, now); top.Title != "" {
 		insights = append(insights, top)
 	}
-	insights = append(insights, computeIncome(incomePostings, now))
+	insights = append(insights, computeIncome(incomePostings, ref))
 
 	sort.SliceStable(insights, func(i, j int) bool {
 		return math.Abs(insights[i].DeltaPct) > math.Abs(insights[j].DeltaPct)
@@ -60,6 +64,16 @@ func filterMonth(postings []posting.Posting, year int, month time.Month) []posti
 	return lo.Filter(postings, func(p posting.Posting, _ int) bool {
 		return p.Date.Year() == year && p.Date.Month() == month
 	})
+}
+
+// effectiveMonth returns the reference month for income-based insights.
+// Falls back to the previous month when the current calendar month has no
+// income postings yet (salary has not arrived).
+func effectiveMonth(incomePostings []posting.Posting, now time.Time) time.Time {
+	if len(filterMonth(incomePostings, now.Year(), now.Month())) == 0 {
+		return now.AddDate(0, -1, 0)
+	}
+	return now
 }
 
 func computeSpendCategory(postings []posting.Posting, now time.Time) []Insight {
@@ -161,11 +175,12 @@ func computeSavingsRate(postings []posting.Posting, now time.Time) Insight {
 	avg := sum / 12.0
 	deltaPP := current - avg
 
+	label := now.Format("January")
 	var body string
 	if deltaPP >= 0 {
-		body = fmt.Sprintf("Savings rate %.0f%% this month — %.0f pp above your 12-month average of %.0f%%", current, deltaPP, avg)
+		body = fmt.Sprintf("Savings rate %.0f%% in %s — %.0f pp above your 12-month average of %.0f%%", current, label, deltaPP, avg)
 	} else {
-		body = fmt.Sprintf("Savings rate %.0f%% this month — %.0f pp below your 12-month average of %.0f%%", current, math.Abs(deltaPP), avg)
+		body = fmt.Sprintf("Savings rate %.0f%% in %s — %.0f pp below your 12-month average of %.0f%%", current, label, math.Abs(deltaPP), avg)
 	}
 
 	return Insight{
@@ -288,16 +303,17 @@ func computeIncome(postings []posting.Posting, now time.Time) Insight {
 		deltaPct = f
 	}
 
+	label := now.Format("January")
 	curF, _ := cur.Float64()
 	var body string
 	if prev.IsZero() {
-		body = fmt.Sprintf("Income ₹%.0f this month", curF)
+		body = fmt.Sprintf("Income ₹%.0f in %s", curF, label)
 	} else {
 		dir := "up"
 		if deltaPct < 0 {
 			dir = "down"
 		}
-		body = fmt.Sprintf("Income ₹%.0f this month — %s %.0f%% vs last month", curF, dir, math.Abs(deltaPct))
+		body = fmt.Sprintf("Income ₹%.0f in %s — %s %.0f%% vs prior month", curF, label, dir, math.Abs(deltaPct))
 	}
 
 	return Insight{

@@ -187,5 +187,29 @@ func TestComputeIncome_BelowThresholdSuppressed(t *testing.T) {
 		p("Income:Salary", prev, "-84500"), // ~0.6% change
 	}
 	insight := computeIncome(postings, now)
+
 	assert.True(t, insight.Suppress)
+}
+
+// ---- effectiveMonth ----
+
+func TestEffectiveMonth_NoIncomeThisMonth_FallsBackToPrev(t *testing.T) {
+	now := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
+	// No postings in May — salary hasn't arrived yet
+	postings := []posting.Posting{
+		p("Income:Salary", now.AddDate(0, -1, 0), "-85000"), // April only
+	}
+	ref := effectiveMonth(postings, now)
+	assert.Equal(t, time.April, ref.Month())
+	assert.Equal(t, 2026, ref.Year())
+}
+
+func TestEffectiveMonth_IncomeThisMonth_UsesCurrentMonth(t *testing.T) {
+	now := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
+	postings := []posting.Posting{
+		p("Income:Salary", now, "-85000"), // salary arrived in May
+	}
+	ref := effectiveMonth(postings, now)
+	assert.Equal(t, time.May, ref.Month())
+	assert.Equal(t, 2026, ref.Year())
 }
