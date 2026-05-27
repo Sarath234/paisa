@@ -154,6 +154,9 @@ func Build(db *gorm.DB, enableCompression bool) *gin.Engine {
 	router.GET("/api/allocation", func(c *gin.Context) {
 		c.JSON(200, GetAllocation(db))
 	})
+	router.GET("/api/insights", func(c *gin.Context) {
+		c.JSON(200, GetInsights(db))
+	})
 	router.GET("/api/portfolio_allocation", func(c *gin.Context) {
 		c.JSON(200, GetPortfolioAllocation(db))
 	})
