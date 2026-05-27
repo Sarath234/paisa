@@ -76,28 +76,18 @@ func filterDateRange(postings []posting.Posting, from, to time.Time) []posting.P
 	})
 }
 
-func sumIncomePostings(postings []posting.Posting) decimal.Decimal {
-	total := decimal.Zero
-	for _, p := range postings {
-		total = total.Add(p.Amount.Neg())
-	}
-	return total
-}
-
 // effectiveMonth returns the reference month for income-based insights.
-// Falls back to the previous month when the current month's income is less
-// than 50% of the prior month's — handles the case where a small credit
-// (interest, dividend) exists but the salary hasn't arrived yet.
+// Uses the current month only if a salary posting (account contains "salary",
+// case-insensitive) has been recorded this month — matching the logic in the
+// savings rate widget on the dashboard.
 func effectiveMonth(incomePostings []posting.Posting, now time.Time) time.Time {
-	prev := now.AddDate(0, -1, 0)
-	curIncome := sumIncomePostings(filterMonth(incomePostings, now.Year(), now.Month()))
-	prevIncome := sumIncomePostings(filterMonth(incomePostings, prev.Year(), prev.Month()))
-
-	// No income at all this month, or income is less than half of prior month → salary not yet landed
-	if curIncome.IsZero() || (prevIncome.IsPositive() && curIncome.LessThan(prevIncome.Mul(decimal.NewFromFloat(0.5)))) {
-		return prev
+	cur := filterMonth(incomePostings, now.Year(), now.Month())
+	for _, p := range cur {
+		if strings.Contains(strings.ToLower(p.Account), "salary") {
+			return now
+		}
 	}
-	return now
+	return now.AddDate(0, -1, 0)
 }
 
 func computeSpendCategory(postings []posting.Posting, now time.Time) []Insight {
