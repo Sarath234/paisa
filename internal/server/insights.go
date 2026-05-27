@@ -32,7 +32,7 @@ func GetInsights(db *gorm.DB) gin.H {
 	incomePostings := query.Init(db).Like("Income:%").LastNMonths(13).All()
 	forecastPostings := query.Init(db).Like("Expenses:%").Forecast().UntilThisMonthEnd().All()
 
-	var insights []Insight
+	insights := []Insight{}
 	insights = append(insights, computeSpendCategory(expensePostings, now)...)
 	insights = append(insights, computeSavingsRate(append(incomePostings, expensePostings...), now))
 	insights = append(insights, computeBudgetInsights(forecastPostings, expensePostings, now)...)

@@ -15,10 +15,11 @@
   $: icon = icons[insight.type] ?? "💡";
   $: showBadge = insight.type !== "top_category";
   $: badgeClass = insight.positive ? "has-text-success" : "has-text-danger";
+  $: unit = insight.type === "savings_rate" ? " pp" : "%";
   $: badgeText =
     insight.delta_pct > 0
-      ? `+${Math.abs(insight.delta_pct).toFixed(0)}%`
-      : `${insight.delta_pct.toFixed(0)}%`;
+      ? `+${Math.abs(insight.delta_pct).toFixed(0)}${unit}`
+      : `${insight.delta_pct.toFixed(0)}${unit}`;
 </script>
 
 <div class="box p-4">

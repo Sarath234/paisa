@@ -134,6 +134,11 @@
   }
 
   onMount(async () => {
+    const [dashData, insightData] = await Promise.all([
+      ajax("/api/dashboard"),
+      ajax("/api/insights")
+    ]);
+
     ({
       expenses,
       cashFlows,
@@ -143,9 +148,9 @@
       networth: { networth, xirr },
       checkingBalances: { asset_breakdowns: checkingBalances },
       transactions
-    } = await ajax("/api/dashboard"));
+    } = dashData);
 
-    ({ insights } = await ajax("/api/insights"));
+    ({ insights } = insightData);
     insights = _.uniqBy(
       _.orderBy(
         insights.filter((i) => !i.suppress),
