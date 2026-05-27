@@ -191,6 +191,57 @@ func TestComputeIncome_BelowThresholdSuppressed(t *testing.T) {
 	assert.True(t, insight.Suppress)
 }
 
+// ---- weekly ----
+
+func TestComputeSpendCategoryWeekly_UpIsNegative(t *testing.T) {
+	now := time.Date(2026, 5, 15, 12, 0, 0, 0, time.UTC)
+	// current week (May 9–15): ₹3,200; prior week (May 2–8): ₹2,000 → +60%
+	cur := now.AddDate(0, 0, -2) // May 13 — within last 7 days
+	prv := now.AddDate(0, 0, -9) // May 6 — within prior 7 days
+	postings := []posting.Posting{
+		p("Expenses:Dining", cur, "3200"),
+		p("Expenses:Dining", prv, "2000"),
+	}
+	insights := computeSpendCategoryWeekly(postings, now)
+	require := assert.New(t)
+	require.Len(insights, 1)
+	require.Equal("spend_category_weekly", insights[0].Type)
+	require.InDelta(60.0, insights[0].DeltaPct, 0.1)
+	require.False(insights[0].Positive)
+	require.False(insights[0].Suppress)
+}
+
+func TestComputeSpendCategoryWeekly_BelowThresholdSuppressed(t *testing.T) {
+	now := time.Date(2026, 5, 15, 12, 0, 0, 0, time.UTC)
+	cur := now.AddDate(0, 0, -1)
+	prv := now.AddDate(0, 0, -8)
+	postings := []posting.Posting{
+		p("Expenses:Food", cur, "1050"), // +5% — below 15% weekly threshold
+		p("Expenses:Food", prv, "1000"),
+	}
+	insights := computeSpendCategoryWeekly(postings, now)
+	assert.True(t, insights[0].Suppress)
+}
+
+func TestComputeTopCategoryWeekly_HighestSpend(t *testing.T) {
+	now := time.Date(2026, 5, 15, 12, 0, 0, 0, time.UTC)
+	recent := now.AddDate(0, 0, -1)
+	postings := []posting.Posting{
+		p("Expenses:Dining", recent, "2500"),
+		p("Expenses:Transport", recent, "800"),
+	}
+	insight := computeTopCategoryWeekly(postings, now)
+	assert.Equal(t, "top_category_weekly", insight.Type)
+	assert.Equal(t, "Dining", insight.Title)
+	assert.False(t, insight.Suppress)
+}
+
+func TestComputeTopCategoryWeekly_NoPostings_EmptyTitle(t *testing.T) {
+	now := time.Date(2026, 5, 15, 12, 0, 0, 0, time.UTC)
+	insight := computeTopCategoryWeekly([]posting.Posting{}, now)
+	assert.Empty(t, insight.Title)
+}
+
 // ---- effectiveMonth ----
 
 func TestEffectiveMonth_NoIncomeThisMonth_FallsBackToPrev(t *testing.T) {

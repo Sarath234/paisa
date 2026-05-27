@@ -6,14 +6,16 @@
 
   const icons: Record<string, string> = {
     spend_category: "💰",
+    spend_category_weekly: "💰",
     savings_rate: "📈",
     budget: "🏷",
     top_category: "🏆",
+    top_category_weekly: "🏆",
     income: "💼"
   };
 
   $: icon = icons[insight.type] ?? "💡";
-  $: showBadge = insight.type !== "top_category";
+  $: showBadge = !insight.type.startsWith("top_category");
   $: badgeClass = insight.positive ? "has-text-success" : "has-text-danger";
   $: unit = insight.type === "savings_rate" ? " pp" : "%";
   $: badgeText =

@@ -38,10 +38,14 @@ func GetInsights(db *gorm.DB) gin.H {
 
 	insights := []Insight{}
 	insights = append(insights, computeSpendCategory(expensePostings, now)...)
+	insights = append(insights, computeSpendCategoryWeekly(expensePostings, now)...)
 	insights = append(insights, computeSavingsRate(append(incomePostings, expensePostings...), ref))
 	insights = append(insights, computeBudgetInsights(forecastPostings, expensePostings, now)...)
 	if top := computeTopCategory(expensePostings, now); top.Title != "" {
 		insights = append(insights, top)
+	}
+	if topW := computeTopCategoryWeekly(expensePostings, now); topW.Title != "" {
+		insights = append(insights, topW)
 	}
 	insights = append(insights, computeIncome(incomePostings, ref))
 
@@ -63,6 +67,12 @@ func topLevelCategory(account string) string {
 func filterMonth(postings []posting.Posting, year int, month time.Month) []posting.Posting {
 	return lo.Filter(postings, func(p posting.Posting, _ int) bool {
 		return p.Date.Year() == year && p.Date.Month() == month
+	})
+}
+
+func filterDateRange(postings []posting.Posting, from, to time.Time) []posting.Posting {
+	return lo.Filter(postings, func(p posting.Posting, _ int) bool {
+		return !p.Date.Before(from) && !p.Date.After(to)
 	})
 }
 
@@ -277,6 +287,121 @@ func computeTopCategory(postings []posting.Posting, now time.Time) Insight {
 
 	return Insight{
 		Type:     "top_category",
+		Title:    topCat,
+		Body:     body,
+		DeltaPct: 0,
+		Positive: true,
+		Suppress: false,
+	}
+}
+
+func computeSpendCategoryWeekly(postings []posting.Posting, now time.Time) []Insight {
+	startOfDay := func(t time.Time) time.Time { return t.Truncate(24 * time.Hour) }
+	curFrom := startOfDay(now.AddDate(0, 0, -6))
+	curTo := utils.EndOfDay(now)
+	prevFrom := startOfDay(now.AddDate(0, 0, -13))
+	prevTo := utils.EndOfDay(now.AddDate(0, 0, -7))
+
+	cur := filterDateRange(postings, curFrom, curTo)
+	prev := filterDateRange(postings, prevFrom, prevTo)
+
+	cur = lo.Filter(cur, func(p posting.Posting, _ int) bool {
+		return !utils.IsSameOrParent(p.Account, "Expenses:Tax")
+	})
+	prev = lo.Filter(prev, func(p posting.Posting, _ int) bool {
+		return !utils.IsSameOrParent(p.Account, "Expenses:Tax")
+	})
+
+	curByCategory := make(map[string]decimal.Decimal)
+	for _, p := range cur {
+		cat := topLevelCategory(p.Account)
+		curByCategory[cat] = curByCategory[cat].Add(p.Amount)
+	}
+	prevByCategory := make(map[string]decimal.Decimal)
+	for _, p := range prev {
+		cat := topLevelCategory(p.Account)
+		prevByCategory[cat] = prevByCategory[cat].Add(p.Amount)
+	}
+
+	categories := lo.Uniq(append(lo.Keys(curByCategory), lo.Keys(prevByCategory)...))
+	sort.Strings(categories)
+
+	var insights []Insight
+	for _, cat := range categories {
+		curAmt := curByCategory[cat]
+		prevAmt := prevByCategory[cat]
+
+		var deltaPct float64
+		var suppress bool
+		if prevAmt.IsZero() {
+			deltaPct = 100
+			suppress = false
+		} else {
+			f, _ := curAmt.Sub(prevAmt).Div(prevAmt).Mul(decimal.NewFromInt(100)).Float64()
+			deltaPct = f
+			suppress = math.Abs(deltaPct) < 15
+		}
+
+		curF, _ := curAmt.Float64()
+		var body string
+		if prevAmt.IsZero() {
+			body = fmt.Sprintf("%s spending ₹%.0f this week — new spend", cat, curF)
+		} else {
+			dir := "more"
+			if deltaPct < 0 {
+				dir = "less"
+			}
+			body = fmt.Sprintf("%s spending ₹%.0f this week — %.0f%% %s than prior week", cat, curF, math.Abs(deltaPct), dir)
+		}
+
+		insights = append(insights, Insight{
+			Type:     "spend_category_weekly",
+			Title:    cat,
+			Body:     body,
+			DeltaPct: deltaPct,
+			Positive: deltaPct <= 0,
+			Suppress: suppress,
+		})
+	}
+	return insights
+}
+
+func computeTopCategoryWeekly(postings []posting.Posting, now time.Time) Insight {
+	startOfDay := func(t time.Time) time.Time { return t.Truncate(24 * time.Hour) }
+	curFrom := startOfDay(now.AddDate(0, 0, -6))
+	curTo := utils.EndOfDay(now)
+
+	cur := filterDateRange(postings, curFrom, curTo)
+	cur = lo.Filter(cur, func(p posting.Posting, _ int) bool {
+		return !utils.IsSameOrParent(p.Account, "Expenses:Tax")
+	})
+
+	if len(cur) == 0 {
+		return Insight{}
+	}
+
+	byCategory := make(map[string]decimal.Decimal)
+	total := decimal.Zero
+	for _, p := range cur {
+		cat := topLevelCategory(p.Account)
+		byCategory[cat] = byCategory[cat].Add(p.Amount)
+		total = total.Add(p.Amount)
+	}
+
+	topCat := ""
+	topAmt := decimal.Zero
+	for cat, amt := range byCategory {
+		if amt.GreaterThan(topAmt) {
+			topAmt = amt
+			topCat = cat
+		}
+	}
+
+	pct, _ := topAmt.Div(total).Mul(decimal.NewFromInt(100)).Float64()
+	body := fmt.Sprintf("%s is your #1 expense this week at %.0f%% of total spend", topCat, pct)
+
+	return Insight{
+		Type:     "top_category_weekly",
 		Title:    topCat,
 		Body:     body,
 		DeltaPct: 0,
