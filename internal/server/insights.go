@@ -41,7 +41,7 @@ func GetInsights(db *gorm.DB) gin.H {
 	}
 	insights = append(insights, computeIncome(incomePostings, now))
 
-	sort.Slice(insights, func(i, j int) bool {
+	sort.SliceStable(insights, func(i, j int) bool {
 		return math.Abs(insights[i].DeltaPct) > math.Abs(insights[j].DeltaPct)
 	})
 
@@ -85,6 +85,7 @@ func computeSpendCategory(postings []posting.Posting, now time.Time) []Insight {
 	}
 
 	categories := lo.Uniq(append(lo.Keys(curByCategory), lo.Keys(prevByCategory)...))
+	sort.Strings(categories)
 
 	var insights []Insight
 	for _, cat := range categories {
@@ -197,8 +198,11 @@ func computeBudgetInsights(budgetedPostings, actualPostings []posting.Posting, n
 		actualByCategory[cat] = actualByCategory[cat].Add(p.Amount)
 	}
 
+	budgetCategories := lo.Keys(budgetByCategory)
+	sort.Strings(budgetCategories)
 	var insights []Insight
-	for cat, budgeted := range budgetByCategory {
+	for _, cat := range budgetCategories {
+		budgeted := budgetByCategory[cat]
 		if budgeted.IsZero() {
 			continue
 		}
