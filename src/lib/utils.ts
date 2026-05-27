@@ -342,6 +342,15 @@ export interface Forecast {
   error: number;
 }
 
+export interface Insight {
+  type: string;
+  title: string;
+  body: string;
+  delta_pct: number;
+  positive: boolean;
+  suppress: boolean;
+}
+
 export interface Budget {
   date: dayjs.Dayjs;
   accounts: AccountBudget[];
@@ -607,6 +616,7 @@ export function ajax(route: "/api/allocation"): Promise<{
   allocation_targets: AllocationTarget[];
 }>;
 export function ajax(route: "/api/portfolio_allocation"): Promise<PortfolioAllocation>;
+export function ajax(route: "/api/insights"): Promise<{ insights: Insight[] }>;
 export function ajax(route: "/api/income"): Promise<{
   income_timeline: Income[];
   tax_timeline: Tax[];
