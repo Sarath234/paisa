@@ -258,9 +258,31 @@ func TestEffectiveMonth_NoIncomeThisMonth_FallsBackToPrev(t *testing.T) {
 func TestEffectiveMonth_IncomeThisMonth_UsesCurrentMonth(t *testing.T) {
 	now := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
 	postings := []posting.Posting{
-		p("Income:Salary", now, "-85000"), // salary arrived in May
+		p("Income:Salary", now.AddDate(0, -1, 0), "-85000"), // April salary
+		p("Income:Salary", now, "-85000"),                   // May salary arrived
 	}
 	ref := effectiveMonth(postings, now)
 	assert.Equal(t, time.May, ref.Month())
 	assert.Equal(t, 2026, ref.Year())
+}
+
+func TestEffectiveMonth_SmallIncomeThisMonth_FallsBackToPrev(t *testing.T) {
+	now := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
+	// April: full salary ₹85,000; May: only ₹100 interest — salary hasn't arrived
+	postings := []posting.Posting{
+		p("Income:Salary", now.AddDate(0, -1, 0), "-85000"),
+		p("Income:Interest", now, "-100"),
+	}
+	ref := effectiveMonth(postings, now)
+	assert.Equal(t, time.April, ref.Month())
+}
+
+func TestEffectiveMonth_NoPrevIncome_UsesCurrentMonth(t *testing.T) {
+	now := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
+	// First month of data — no prior month to compare against
+	postings := []posting.Posting{
+		p("Income:Salary", now, "-85000"),
+	}
+	ref := effectiveMonth(postings, now)
+	assert.Equal(t, time.May, ref.Month())
 }
