@@ -32,8 +32,8 @@ func TestComputeSpendCategory_UpIsNegative(t *testing.T) {
 	require.Len(insights, 1)
 	require.Equal("Food", insights[0].Title)
 	require.InDelta(24.0, insights[0].DeltaPct, 0.1)
-	require.False(insights[0].Positive)   // up = bad
-	require.False(insights[0].Suppress)  // |Δ%| >= 10%
+	require.False(insights[0].Positive) // up = bad
+	require.False(insights[0].Suppress) // |Δ%| >= 10%
 }
 
 func TestComputeSpendCategory_DownIsPositive(t *testing.T) {
