@@ -53,6 +53,7 @@
   }
   const links: Link[] = [
     { label: "Dashboard", href: "/", hide: true },
+    { label: "Insights", href: "/insights" },
     {
       label: "Cash Flow",
       href: "/cash_flow",

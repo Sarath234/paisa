@@ -11,6 +11,7 @@
     formatFloat,
     type Budget,
     type CashFlow,
+    type Insight,
     type Networth,
     type Posting,
     type Transaction,
@@ -32,6 +33,7 @@
   import GoalSummaryCard from "$lib/components/GoalSummaryCard.svelte";
   import LegendCard from "$lib/components/LegendCard.svelte";
   import BalanceCard from "$lib/components/BalanceCard.svelte";
+  import InsightCard from "$lib/components/InsightCard.svelte";
 
   let UntypedMasonryGrid = MasonryGrid as any;
 
@@ -51,6 +53,7 @@
   let selectedExpenses: Posting[] = [];
   let isEmpty = false;
   let checkingBalances: Record<string, AssetBreakdown> = {};
+  let insights: Insight[] = [];
 
   $: if (renderer) {
     selectedExpenses = expenses[month] || [];
@@ -131,6 +134,11 @@
   }
 
   onMount(async () => {
+    const [dashData, insightData] = await Promise.all([
+      ajax("/api/dashboard"),
+      ajax("/api/insights")
+    ]);
+
     ({
       expenses,
       cashFlows,
@@ -140,7 +148,17 @@
       networth: { networth, xirr },
       checkingBalances: { asset_breakdowns: checkingBalances },
       transactions
-    } = await ajax("/api/dashboard"));
+    } = dashData);
+
+    ({ insights } = insightData);
+    insights = _.uniqBy(
+      _.orderBy(
+        insights.filter((i) => !i.suppress),
+        (i) => Math.abs(i.delta_pct),
+        "desc"
+      ),
+      (i) => i.type
+    ).slice(0, 5);
 
     goalSummaries = _.sortBy(goalSummaries, (g) => -g.priority);
 
@@ -289,6 +307,25 @@
                     {/each}
                   </UntypedMasonryGrid>
                 </div>
+              </div>
+            </article>
+          </div>
+        {/if}
+
+        {#if insights.length > 0}
+          <div class="tile is-parent">
+            <article class="tile is-child min-w-0">
+              <p class="subtitle">
+                <a class="secondary-link has-text-grey" href="/insights">Insights</a>
+              </p>
+              <div class="content">
+                <UntypedMasonryGrid gap={10} maxStretchColumnSize={400} align="stretch">
+                  {#each insights as insight}
+                    <div class="is-flex-grow-1">
+                      <InsightCard {insight} />
+                    </div>
+                  {/each}
+                </UntypedMasonryGrid>
               </div>
             </article>
           </div>
