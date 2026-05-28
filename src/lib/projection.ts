@@ -6,7 +6,6 @@ import {
   formatCurrency,
   formatCurrencyCrude,
   isMobile,
-  svgUrl,
   tooltip,
   type Legend
 } from "./utils";
@@ -101,7 +100,6 @@ export function renderProjection(
   }
 
   // Shaded gain area between investment and networth lines
-  const gainAreaID = _.uniqueId("proj-gain");
   const gainArea = d3
     .area<ProjectionPoint>()
     .curve(d3.curveMonotoneX)
@@ -111,7 +109,6 @@ export function renderProjection(
 
   g.append("path")
     .datum(points)
-    .attr("id", gainAreaID)
     .style("fill", COLORS.gain)
     .style("opacity", "0.2")
     .attr("d", gainArea);
