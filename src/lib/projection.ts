@@ -10,13 +10,13 @@ import {
   type Legend
 } from "./utils";
 
-interface ProjectionPoint {
+export interface ProjectionPoint {
   date: Date;
   networth: number;
   investment: number;
 }
 
-function computePoints(
+function computeProjectionPoints(
   currentNetworth: number,
   currentInvestment: number,
   monthlySavings: number,
@@ -41,17 +41,44 @@ function computePoints(
   return points;
 }
 
+function drawLine(
+  g: d3.Selection<SVGGElement, unknown, null, undefined>,
+  points: ProjectionPoint[],
+  x: d3.ScaleTime<number, number>,
+  y: d3.ScaleLinear<number, number>,
+  accessor: (d: ProjectionPoint) => number,
+  color: string,
+  dashed: boolean
+) {
+  g.append("path")
+    .datum(points)
+    .style("stroke", color)
+    .style("stroke-width", "1.5")
+    .style("fill", "none")
+    .style("opacity", dashed ? "0.7" : "1")
+    .style("stroke-dasharray", dashed ? "6,4" : null)
+    .attr(
+      "d",
+      d3
+        .line<ProjectionPoint>()
+        .curve(d3.curveMonotoneX)
+        .x((d) => x(d.date))
+        .y((d) => y(accessor(d)))
+    );
+}
+
 export function renderProjection(
   currentNetworth: number,
   currentInvestment: number,
   monthlySavings: number,
   horizonYears: number,
   annualReturnPct: number,
-  element: Element
+  element: Element,
+  historicalPoints: ProjectionPoint[] = []
 ): { destroy: () => void; legends: Legend[] } {
   const horizonMonths = horizonYears * 12;
   const annualRate = annualReturnPct / 100;
-  const points = computePoints(
+  const projectionPoints = computeProjectionPoints(
     currentNetworth,
     currentInvestment,
     monthlySavings,
@@ -73,16 +100,19 @@ export function renderProjection(
 
   svg.attr("width", width + margin.left + margin.right);
 
-  const allValues = _.flatMap(points, (p) => [p.networth, p.investment]);
-  allValues.push(0);
+  const xStart = historicalPoints.length > 0 ? historicalPoints[0].date : projectionPoints[0].date;
+  const xEnd = projectionPoints[projectionPoints.length - 1].date;
 
-  const x = d3
-    .scaleTime()
-    .range([0, width])
-    .domain([points[0].date, points[points.length - 1].date]);
+  const allValues = [
+    ..._.flatMap(historicalPoints, (p) => [p.networth, p.investment]),
+    ..._.flatMap(projectionPoints, (p) => [p.networth, p.investment]),
+    0
+  ];
 
+  const x = d3.scaleTime().range([0, width]).domain([xStart, xEnd]);
   const y = d3.scaleLinear().range([height, 0]).domain(d3.extent(allValues));
 
+  // Axes
   g.append("g")
     .attr("class", "axis x")
     .attr("transform", `translate(0,${height})`)
@@ -99,7 +129,7 @@ export function renderProjection(
       .call(d3.axisRight(y).tickPadding(5).tickFormat(formatCurrencyCrude));
   }
 
-  // Shaded gain area between investment and networth lines
+  // Gain shading — projection only
   const gainArea = d3
     .area<ProjectionPoint>()
     .curve(d3.curveMonotoneX)
@@ -108,87 +138,83 @@ export function renderProjection(
     .y1((d) => y(d.networth));
 
   g.append("path")
-    .datum(points)
+    .datum(projectionPoints)
     .style("fill", COLORS.gain)
-    .style("opacity", "0.2")
+    .style("opacity", "0.15")
     .attr("d", gainArea);
 
-  // Net Investment line (dashed)
-  g.append("path")
-    .datum(points)
-    .style("stroke", COLORS.secondary)
-    .style("stroke-width", "1.5")
-    .style("stroke-dasharray", "6,4")
-    .style("fill", "none")
-    .attr(
-      "d",
-      d3
-        .line<ProjectionPoint>()
-        .curve(d3.curveMonotoneX)
-        .x((d) => x(d.date))
-        .y((d) => y(d.investment))
-    );
+  // Historical lines (solid)
+  if (historicalPoints.length > 0) {
+    drawLine(g, historicalPoints, x, y, (d) => d.investment, COLORS.secondary, false);
+    drawLine(g, historicalPoints, x, y, (d) => d.networth, COLORS.primary, false);
+  }
 
-  // Projected Net Worth line (solid)
-  g.append("path")
-    .datum(points)
-    .style("stroke", COLORS.primary)
-    .style("stroke-width", "2")
-    .style("fill", "none")
-    .attr(
-      "d",
-      d3
-        .line<ProjectionPoint>()
-        .curve(d3.curveMonotoneX)
-        .x((d) => x(d.date))
-        .y((d) => y(d.networth))
-    );
+  // Projection lines (dashed) — prepend last historical point so lines connect
+  const connectInv = historicalPoints.length > 0
+    ? [historicalPoints[historicalPoints.length - 1], ...projectionPoints]
+    : projectionPoints;
+  const connectNW = connectInv;
 
-  // Hover
+  drawLine(g, connectInv, x, y, (d) => d.investment, COLORS.secondary, true);
+  drawLine(g, connectNW, x, y, (d) => d.networth, COLORS.primary, true);
+
+  // "Today" vertical marker
+  const todayX = x(projectionPoints[0].date);
+  g.append("line")
+    .attr("x1", todayX).attr("x2", todayX)
+    .attr("y1", 0).attr("y2", height)
+    .style("stroke", "#888")
+    .style("stroke-width", "1")
+    .style("stroke-dasharray", "3,3");
+
+  g.append("text")
+    .attr("x", todayX + 4)
+    .attr("y", 12)
+    .style("fill", "#888")
+    .style("font-size", "11px")
+    .text("Today");
+
+  // Hover — covers historical + projection points
   const hoverCircle = g.append("circle").attr("r", "3").attr("fill", "none");
   const t = tippy(hoverCircle.node(), { theme: "light", delay: 0, allowHTML: true });
 
-  const voronoiNW: [number, number][] = points.map((d) => [x(d.date), y(d.networth)]);
-  const voronoiInv: [number, number][] = points.map((d) => [x(d.date), y(d.investment)]);
-  const voronoi = d3.Delaunay.from(voronoiNW.concat(voronoiInv)).voronoi([
-    0,
-    0,
-    width,
-    height
-  ]);
+  const allPoints: ["actual" | "projected", ProjectionPoint][] = [
+    ...historicalPoints.map((p) => ["actual", p] as ["actual" | "projected", ProjectionPoint]),
+    ...projectionPoints.map((p) => ["projected", p] as ["actual" | "projected", ProjectionPoint])
+  ];
+
+  const voronoiNW: [number, number][] = allPoints.map(([, d]) => [x(d.date), y(d.networth)]);
+  const voronoiInv: [number, number][] = allPoints.map(([, d]) => [x(d.date), y(d.investment)]);
+  const voronoi = d3.Delaunay.from(voronoiNW.concat(voronoiInv)).voronoi([0, 0, width, height]);
 
   const labelFmt = d3.timeFormat("%b %Y");
 
+  type HoverEntry = ["networth" | "investment", "actual" | "projected", ProjectionPoint];
+  const hoverData: HoverEntry[] = [
+    ...allPoints.map(([kind, p]) => ["networth", kind, p] as HoverEntry),
+    ...allPoints.map(([kind, p]) => ["investment", kind, p] as HoverEntry)
+  ];
+
   g.append("g")
     .selectAll("path")
-    .data(
-      (
-        points.map((p) => ["networth", p] as ["networth" | "investment", ProjectionPoint])
-      ).concat(
-        points.map((p) => ["investment", p] as ["networth" | "investment", ProjectionPoint])
-      )
-    )
+    .data(hoverData)
     .enter()
     .append("path")
     .style("pointer-events", "all")
     .style("fill", "none")
     .attr("d", (_, i) => voronoi.renderCell(i))
-    .on("mouseover", (_, [type, d]) => {
-      const cy = type === "networth" ? y(d.networth) : y(d.investment);
-      const color = type === "networth" ? COLORS.primary : COLORS.secondary;
+    .on("mouseover", (_, [line, kind, d]) => {
+      const cy = line === "networth" ? y(d.networth) : y(d.investment);
+      const color = line === "networth" ? COLORS.primary : COLORS.secondary;
       hoverCircle.attr("cx", x(d.date)).attr("cy", cy).attr("fill", color);
+      const nwLabel = kind === "actual" ? "Net Worth" : "Projected Net Worth";
+      const invLabel = kind === "actual" ? "Net Investment" : "Projected Net Investment";
       t.setProps({
-        placement: type === "networth" ? "top" : "bottom",
+        placement: line === "networth" ? "top" : "bottom",
         content: tooltip([
           ["Month", labelFmt(d.date)],
-          [
-            "Projected Net Worth",
-            [formatCurrency(d.networth), "has-text-weight-bold has-text-right"]
-          ],
-          [
-            "Projected Net Investment",
-            [formatCurrency(d.investment), "has-text-weight-bold has-text-right"]
-          ]
+          [nwLabel, [formatCurrency(d.networth), "has-text-weight-bold has-text-right"]],
+          [invLabel, [formatCurrency(d.investment), "has-text-weight-bold has-text-right"]]
         ])
       });
       t.show();
@@ -199,9 +225,9 @@ export function renderProjection(
     });
 
   const legends: Legend[] = [
-    { label: "Projected Net Worth", color: COLORS.primary, shape: "line" },
-    { label: "Projected Net Investment", color: COLORS.secondary, shape: "line" },
-    { label: "Market Gain", color: COLORS.gain, shape: "square" }
+    { label: "Net Worth", color: COLORS.primary, shape: "line" },
+    { label: "Net Investment", color: COLORS.secondary, shape: "line" },
+    { label: "Projected Gain", color: COLORS.gain, shape: "square" }
   ];
 
   return { destroy: () => t.destroy(), legends };

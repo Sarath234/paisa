@@ -1,7 +1,8 @@
 <script lang="ts">
   import { ajax, formatCurrency, isMobile, type Legend } from "$lib/utils";
   import COLORS from "$lib/colors";
-  import { renderProjection } from "$lib/projection";
+  import { renderProjection, type ProjectionPoint } from "$lib/projection";
+  import dayjs from "dayjs";
   import _ from "lodash";
   import { onDestroy, onMount } from "svelte";
   import LevelItem from "$lib/components/LevelItem.svelte";
@@ -16,6 +17,7 @@
   let horizonYears = 5;
   let returnPct = 12;
   let loaded = false;
+  let historicalPoints: ProjectionPoint[] = [];
 
   let svg: Element;
   let destroy: (() => void) | null = null;
@@ -38,7 +40,8 @@
       monthlySavings,
       horizonYears,
       returnPct,
-      svg
+      svg,
+      historicalPoints
     ));
   }
 
@@ -48,6 +51,15 @@
 
   onMount(async () => {
     const result = await ajax("/api/networth");
+    const cutoff = dayjs().subtract(12, "month");
+    historicalPoints = result.networthTimeline
+      .filter((p) => p.date.isAfter(cutoff))
+      .map((p) => ({
+        date: p.date.toDate(),
+        networth: p.investmentAmount + p.gainAmount - p.withdrawalAmount,
+        investment: p.investmentAmount - p.withdrawalAmount
+      }));
+
     const last = _.last(result.networthTimeline);
     if (last) {
       currentNetworth = last.investmentAmount + last.gainAmount - last.withdrawalAmount;
