@@ -95,6 +95,7 @@
       children: [
         { label: "Balance", href: "/balance" },
         { label: "Networth", href: "/networth", dateRangeSelector: true },
+        { label: "Projection", href: "/projection" },
         { label: "Investment", href: "/investment" },
         { label: "Gain", href: "/gain" },
         { label: "Allocation", href: "/allocation", help: "allocation-targets" },
