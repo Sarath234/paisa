@@ -35,10 +35,10 @@ fi
 
 # --- Install ---
 chmod u+x "$BINARY"
-# Remove macOS Gatekeeper quarantine flag set on downloaded files
-xattr -d com.apple.quarantine "$BINARY" 2>/dev/null || true
 echo "Installing to $INSTALL_PATH..."
 sudo mv "$BINARY" "$INSTALL_PATH"
+# Clear Gatekeeper quarantine from installed binary (unsigned binaries are blocked otherwise)
+sudo xattr -c "$INSTALL_PATH"
 
 # --- Start ---
 mkdir -p "$(dirname "$LOG")"
