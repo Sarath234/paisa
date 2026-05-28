@@ -583,6 +583,7 @@ export function ajax(
 export function ajax(route: "/api/networth"): Promise<{
   networthTimeline: Networth[];
   xirr: number;
+  monthlySavings: number;
 }>;
 export function ajax(route: "/api/gain"): Promise<{
   gain_breakdown: Gain[];
