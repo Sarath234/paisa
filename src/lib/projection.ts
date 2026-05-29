@@ -26,7 +26,6 @@ function computeProjectionPoints(
   const monthlyRate = annualReturnRate / 12;
   const points: ProjectionPoint[] = [];
   const origin = new Date();
-  origin.setDate(1);
 
   let w = currentNetworth;
   let inv = currentInvestment;
