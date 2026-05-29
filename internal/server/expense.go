@@ -237,8 +237,28 @@ func computeSegmentedGraph(postings []posting.Posting) Graph {
 	transactions := transaction.Build(postings)
 
 	for _, t := range transactions {
-		from := lo.Filter(t.Postings, func(p posting.Posting, _ int) bool { return p.Amount.LessThan(decimal.Zero) })
-		to := lo.Filter(t.Postings, func(p posting.Posting, _ int) bool { return p.Amount.GreaterThan(decimal.Zero) })
+		// Ledger may emit multiple rows for the same account in different
+		// commodities (e.g. Income:Salary split into an INR row and a USD cost
+		// row for a multi-currency purchase). Merge them by account so the
+		// flow-matching treats them as a single source/destination.
+		rawFrom := lo.Filter(t.Postings, func(p posting.Posting, _ int) bool { return p.Amount.LessThan(decimal.Zero) })
+		rawTo := lo.Filter(t.Postings, func(p posting.Posting, _ int) bool { return p.Amount.GreaterThan(decimal.Zero) })
+
+		mergeByAccount := func(ps []posting.Posting) []posting.Posting {
+			seen := make(map[string]int)
+			var merged []posting.Posting
+			for _, p := range ps {
+				if idx, ok := seen[p.Account]; ok {
+					merged[idx].Amount = merged[idx].Amount.Add(p.Amount)
+				} else {
+					seen[p.Account] = len(merged)
+					merged = append(merged, p)
+				}
+			}
+			return merged
+		}
+		from := mergeByAccount(rawFrom)
+		to := mergeByAccount(rawTo)
 
 		for _, f := range from {
 			for f.Amount.Abs().GreaterThan(decimal.NewFromFloat(0.1)) && len(to) > 0 {
