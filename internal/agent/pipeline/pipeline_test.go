@@ -76,6 +76,20 @@ func TestProcess_UnknownMerchantNeedsApproval(t *testing.T) {
 	_ = err
 }
 
+func TestParseCallback(t *testing.T) {
+	action, refID := parseCallback("approve:REF001")
+	assert.Equal(t, "approve", action)
+	assert.Equal(t, "REF001", refID)
+
+	action, refID = parseCallback("skip:REF-XYZ-99")
+	assert.Equal(t, "skip", action)
+	assert.Equal(t, "REF-XYZ-99", refID)
+
+	action, refID = parseCallback("badformat")
+	assert.Equal(t, "", action)
+	assert.Equal(t, "", refID)
+}
+
 func TestProcess_DuplicateSkipped(t *testing.T) {
 	p, dir, _ := setup(t)
 	p.db.Create(&agentdb.MerchantRule{Merchant: "Swiggy", Account: "Expenses:Food:Dining", ApproveCount: 5, AutoApprove: true})

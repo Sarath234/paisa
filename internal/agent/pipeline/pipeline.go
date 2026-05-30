@@ -84,18 +84,24 @@ func (p *Pipeline) Process(rawText, source string) (Action, error) {
 	return ActionPendingApproval, p.sendApproval(tx)
 }
 
+func parseCallback(data string) (action, refID string) {
+	idx := strings.Index(data, ":")
+	if idx < 0 {
+		return "", ""
+	}
+	return data[:idx], data[idx+1:]
+}
+
 // HandleCallback processes a Telegram inline button callback.
 // data format: "approve:<refID>" | "skip:<refID>" | "edit:<refID>"
 func (p *Pipeline) HandleCallback(callbackID, data string) {
 	_ = p.bot.AnswerCallback(callbackID)
 
-	idx := strings.Index(data, ":")
-	if idx < 0 {
+	action, refID := parseCallback(data)
+	if action == "" {
 		log.Warnf("pipeline: malformed callback data %q", data)
 		return
 	}
-	action := data[:idx]
-	refID := data[idx+1:]
 
 	val, ok := p.pending.Load(refID)
 	if !ok {
