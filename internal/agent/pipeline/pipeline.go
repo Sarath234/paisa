@@ -151,6 +151,37 @@ func (p *Pipeline) sendApproval(tx parser.ParsedTransaction) error {
 	return p.bot.SendApprovalCard(tx)
 }
 
+// ProcessStatement runs a full statement through the pipeline:
+// parses all rows, deduplicates, posts gaps, returns reconciliation counts.
+func (p *Pipeline) ProcessStatement(pdfText string) (gaps, duplicates int, err error) {
+	accounts := make([]string, 0, len(p.cfg.Accounts))
+	for _, v := range p.cfg.Accounts {
+		accounts = append(accounts, v)
+	}
+
+	txns, err := p.parser.ParseMultiple(pdfText, accounts)
+	if err != nil {
+		return 0, 0, fmt.Errorf("parse statement: %w", err)
+	}
+
+	for _, tx := range txns {
+		result := dedup.Check(p.db, tx.RefID, tx.Date, tx.Bank+":"+tx.AccountLast4, tx.Amount)
+		if result == dedup.Duplicate {
+			duplicates++
+			continue
+		}
+		if err := p.post(tx, "gmail_statement"); err != nil {
+			log.Warnf("pipeline: statement post failed: %v", err)
+			continue
+		}
+		gaps++
+	}
+
+	summary := fmt.Sprintf("Statement reconciled: %d gaps filled · %d already imported", gaps, duplicates)
+	_ = p.bot.SendText(summary)
+	return gaps, duplicates, nil
+}
+
 func (p *Pipeline) resolveAccount(bank, last4 string) string {
 	key := bank + ":" + last4
 	if acct, ok := p.cfg.Accounts[key]; ok {

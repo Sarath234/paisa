@@ -89,17 +89,20 @@ func main() {
 					log.Warnf("gmail poll: %v", err)
 				} else {
 					for _, email := range emails {
-						rawText := email.Body
-						source := "gmail_alert"
 						if email.Type == gmail.StatementEmail {
-							rawText = email.PDFText
-							source = "gmail_statement"
-						}
-						if rawText == "" {
-							continue
-						}
-						if _, err := pipe.Process(rawText, source); err != nil {
-							log.Warnf("pipeline gmail: %v", err)
+							gaps, dups, err := pipe.ProcessStatement(email.PDFText)
+							if err != nil {
+								log.Warnf("pipeline statement: %v", err)
+							} else {
+								log.Infof("statement processed: %d gaps, %d dups", gaps, dups)
+							}
+						} else {
+							if email.Body == "" {
+								continue
+							}
+							if _, err := pipe.Process(email.Body, "gmail_alert"); err != nil {
+								log.Warnf("pipeline gmail: %v", err)
+							}
 						}
 					}
 				}
