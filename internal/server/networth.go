@@ -31,7 +31,11 @@ func GetNetworth(db *gorm.DB) gin.H {
 	postings = service.PopulateMarketPrice(db, postings)
 	networthTimeline := computeNetworthTimeline(db, postings, false)
 	xirr := service.XIRR(db, postings)
-	return gin.H{"networthTimeline": networthTimeline, "xirr": xirr}
+
+	incExpPostings := query.Init(db).Like("Income:%", "Expenses:%").LastNMonths(13).All()
+	monthlySavings := computeMonthlySavings(incExpPostings, utils.Now())
+
+	return gin.H{"networthTimeline": networthTimeline, "xirr": xirr, "monthlySavings": monthlySavings}
 }
 
 func GetCurrentNetworth(db *gorm.DB, allPostings []posting.Posting) gin.H {
@@ -210,4 +214,23 @@ func computeNetworthTimeline(db *gorm.DB, postings []posting.Posting, computeBal
 		}
 	}
 	return networths
+}
+
+func computeMonthlySavings(postings []posting.Posting, now time.Time) decimal.Decimal {
+	total := decimal.Zero
+	for i := 1; i <= 12; i++ {
+		m := now.AddDate(0, -i, 0)
+		monthly := filterMonth(postings, m.Year(), m.Month())
+		income := decimal.Zero
+		expenses := decimal.Zero
+		for _, p := range monthly {
+			if utils.IsSameOrParent(p.Account, "Income") {
+				income = income.Add(p.Amount.Neg())
+			} else if utils.IsSameOrParent(p.Account, "Expenses") {
+				expenses = expenses.Add(p.Amount)
+			}
+		}
+		total = total.Add(income.Sub(expenses))
+	}
+	return total.Div(decimal.NewFromInt(12)).Round(2)
 }

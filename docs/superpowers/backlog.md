@@ -106,6 +106,23 @@ Per-card monthly spend breakdown and category split on the Credit Cards page. An
 
 ---
 
+### Enhancement 17 — Net Worth Projection
+**Priority:** 8/10 | Complexity: Low | Impact: High
+**Status:** Spec written (`docs/superpowers/specs/2026-05-28-net-worth-projection-design.md`)
+
+New "Projection" page under Assets. Shows projected net worth and net investment lines N years forward, driven by current net worth, 12-month average monthly savings, and a user-adjustable return rate slider (6–18%, default 12%). Horizon toggle: 1Y/3Y/5Y/10Y.
+
+**Deferred sub-features (add to future enhancements when prioritised):**
+- Multiple scenario comparison (what-if sliders) → Enh 16
+- Inflation adjustment
+- Goal / milestone marker lines on chart
+- Per-asset-class return rates
+- ML/data-science savings prediction model
+
+**Files:** `internal/server/networth.go` (add `monthlySavings`), `src/lib/projection.ts` (new renderer), `src/routes/(app)/assets/projection/+page.svelte` (new page), `src/lib/components/Navbar.svelte`
+
+---
+
 ### Enhancement 12 — Doctor Page Triage
 **Priority:** 5/10 | Complexity: Low | Impact: Medium
 
