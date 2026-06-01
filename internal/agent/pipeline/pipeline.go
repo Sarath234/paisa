@@ -49,9 +49,9 @@ func (p *Pipeline) Bot() *telegram.Bot {
 // Process parses rawText from source, deduplicates, gates on merchant rules,
 // and either auto-posts or sends a Telegram approval card.
 func (p *Pipeline) Process(rawText, source string) (Action, error) {
-	accounts := make([]string, 0, len(p.cfg.Accounts))
-	for _, v := range p.cfg.Accounts {
-		accounts = append(accounts, v)
+	accounts := make([]string, 0, len(p.cfg.ParserRules.Sources))
+	for _, s := range p.cfg.ParserRules.Sources {
+		accounts = append(accounts, s.Account)
 	}
 
 	tx, err := p.parser.Parse(rawText, accounts)
@@ -154,9 +154,9 @@ func (p *Pipeline) sendApproval(tx parser.ParsedTransaction) error {
 // ProcessStatement runs a full statement through the pipeline:
 // parses all rows, deduplicates, posts gaps, returns reconciliation counts.
 func (p *Pipeline) ProcessStatement(pdfText string) (gaps, duplicates int, err error) {
-	accounts := make([]string, 0, len(p.cfg.Accounts))
-	for _, v := range p.cfg.Accounts {
-		accounts = append(accounts, v)
+	accounts := make([]string, 0, len(p.cfg.ParserRules.Sources))
+	for _, s := range p.cfg.ParserRules.Sources {
+		accounts = append(accounts, s.Account)
 	}
 
 	txns, err := p.parser.ParseMultiple(pdfText, accounts)
@@ -183,9 +183,14 @@ func (p *Pipeline) ProcessStatement(pdfText string) (gaps, duplicates int, err e
 }
 
 func (p *Pipeline) resolveAccount(bank, last4 string) string {
-	key := bank + ":" + last4
-	if acct, ok := p.cfg.Accounts[key]; ok {
-		return acct
+	if last4 != "" {
+		for _, s := range p.cfg.ParserRules.Sources {
+			for _, c := range s.Contains {
+				if strings.HasSuffix(c, last4) {
+					return s.Account
+				}
+			}
+		}
 	}
 	return "Assets:" + bank + ":XX" + last4
 }

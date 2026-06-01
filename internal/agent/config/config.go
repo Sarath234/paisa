@@ -12,7 +12,7 @@ type Config struct {
 	Telegram      TelegramConfig      `yaml:"telegram"`
 	Gmail         GmailConfig         `yaml:"gmail"`
 	MerchantRules MerchantRulesConfig `yaml:"merchant_rules"`
-	Accounts      map[string]string   `yaml:"accounts"` // "BANK:last4" → "Assets:BANK:AccountName"
+	ParserRules   ParserRules         `yaml:"parser_rules"`
 }
 
 type PaisaConfig struct {
@@ -42,6 +42,32 @@ type MerchantRulesConfig struct {
 	PromoteAfterApprovals int     `yaml:"promote_after_approvals"`
 }
 
+type ParserRules struct {
+	DayParts  DayPartsConfig    `yaml:"day_parts"`
+	Merchants []MerchantPattern `yaml:"merchants"`
+	Sources   []SourceRule      `yaml:"sources"`
+}
+
+type DayPartsConfig struct {
+	BreakfastEnd int `yaml:"breakfast_end"`
+	LunchEnd     int `yaml:"lunch_end"`
+	DinnerEnd    int `yaml:"dinner_end"`
+}
+
+type MerchantPattern struct {
+	Keyword     string `yaml:"keyword"`
+	Description string `yaml:"description"`
+	Account     string `yaml:"account"`
+}
+
+type SourceRule struct {
+	ID          string   `yaml:"id"`
+	Contains    []string `yaml:"contains"`
+	Account     string   `yaml:"account"`
+	DestAccount string   `yaml:"dest_account"`
+	Description string   `yaml:"description"`
+}
+
 func DefaultConfig() Config {
 	return Config{
 		Paisa:  PaisaConfig{URL: "http://localhost:7500"},
@@ -50,6 +76,9 @@ func DefaultConfig() Config {
 		MerchantRules: MerchantRulesConfig{
 			AutoApproveThreshold:  10000,
 			PromoteAfterApprovals: 3,
+		},
+		ParserRules: ParserRules{
+			DayParts: DayPartsConfig{BreakfastEnd: 11, LunchEnd: 15, DinnerEnd: 20},
 		},
 	}
 }

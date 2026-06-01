@@ -51,7 +51,6 @@ func setup(t *testing.T) (*Pipeline, string, *httptest.Server) {
 	cfg.Paisa.URL = paisaSrv.URL
 	cfg.Paisa.JournalDir = dir
 	cfg.Ollama.URL = ollamaSrv.URL
-	cfg.Accounts = map[string]string{"HDFC:1234": "Assets:HDFC:Savings"}
 
 	p := New(db, cfg)
 	return p, dir, paisaSrv
