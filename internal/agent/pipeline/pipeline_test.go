@@ -65,7 +65,7 @@ func TestProcess_KnownMerchantAutoPost(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, ActionPosted, action)
 
-	data, _ := os.ReadFile(filepath.Join(dir, "auto-imported.journal"))
+	data, _ := os.ReadFile(filepath.Join(dir, "auto-import.ledger"))
 	assert.Contains(t, string(data), "Swiggy")
 }
 
@@ -99,6 +99,6 @@ func TestProcess_DuplicateSkipped(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, ActionDuplicate, action)
 
-	data, _ := os.ReadFile(filepath.Join(dir, "auto-imported.journal"))
+	data, _ := os.ReadFile(filepath.Join(dir, "auto-import.ledger"))
 	assert.Equal(t, 1, strings.Count(string(data), "2025/05/14 Swiggy"))
 }

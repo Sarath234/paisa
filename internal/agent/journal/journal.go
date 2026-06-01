@@ -37,9 +37,9 @@ func Format(tx parser.ParsedTransaction, source, debitAccount string) string {
 	return entry.String()
 }
 
-// Append writes entry to <journalDir>/auto-imported.journal (creates if absent).
+// Append writes entry to <journalDir>/auto-import.ledger (creates if absent).
 func Append(journalDir, entry string) error {
-	path := filepath.Join(journalDir, "auto-imported.journal")
+	path := filepath.Join(journalDir, "auto-import.ledger")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return err

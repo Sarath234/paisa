@@ -63,11 +63,11 @@ func TestAppend_WritesToFile(t *testing.T) {
 	err := Append(dir, entry)
 	assert.NoError(t, err)
 
-	data, _ := os.ReadFile(filepath.Join(dir, "auto-imported.journal"))
+	data, _ := os.ReadFile(filepath.Join(dir, "auto-import.ledger"))
 	assert.Contains(t, string(data), "Swiggy")
 
 	_ = Append(dir, "2025/05/15 Amazon\n    Expenses:Shopping    INR 500.00\n    Assets:HDFC:Savings\n\n")
-	data, _ = os.ReadFile(filepath.Join(dir, "auto-imported.journal"))
+	data, _ = os.ReadFile(filepath.Join(dir, "auto-import.ledger"))
 	assert.Contains(t, string(data), "Swiggy")
 	assert.Contains(t, string(data), "Amazon")
 }
