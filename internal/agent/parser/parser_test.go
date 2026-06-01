@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/ananthakumaran/paisa/internal/agent/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -32,7 +33,7 @@ func TestParse_ExtractsTransaction(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := New(srv.URL, "gemma3:12b")
+	p := New(srv.URL, "gemma3:12b", config.ParserRules{})
 	tx, err := p.Parse("HDFC Bank: Rs.2,450.00 debited from a/c XX1234 at SWIGGY Ref 47291830", []string{"Expenses:Food:Dining"})
 
 	assert.NoError(t, err)
@@ -48,7 +49,7 @@ func TestParse_HandlesOllamaError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := New(srv.URL, "gemma3:12b")
+	p := New(srv.URL, "gemma3:12b", config.ParserRules{})
 	_, err := p.Parse("some text", nil)
 	assert.Error(t, err)
 }
@@ -67,10 +68,36 @@ func TestParseMultiple_ExtractsManyTransactions(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := New(srv.URL, "gemma3:12b")
+	p := New(srv.URL, "gemma3:12b", config.ParserRules{})
 	txns, err := p.ParseMultiple("... PDF statement text ...", nil)
 	assert.NoError(t, err)
 	assert.Len(t, txns, 2)
 	assert.Equal(t, "Swiggy", txns[0].Merchant)
 	assert.Equal(t, "Amazon", txns[1].Merchant)
+}
+
+func TestParse_UsesRegexWhenSourceMatches(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(500)
+	}))
+	defer srv.Close()
+
+	rules := config.ParserRules{
+		DayParts: config.DayPartsConfig{BreakfastEnd: 11, LunchEnd: 15, DinnerEnd: 20},
+		Merchants: []config.MerchantPattern{
+			{Keyword: "", Description: "Misc", Account: "Expenses:Misc"},
+		},
+		Sources: []config.SourceRule{
+			{ID: "fi_upi", Contains: []string{"debited via UPI on"}, Account: "Assets:Checking:FI5687"},
+		},
+	}
+	p := New(srv.URL, "gemma3:12b", rules)
+	tx, err := p.Parse("INR 100.00 debited via UPI on 14-05-2025 at Store", nil)
+
+	assert.NoError(t, err)
+	assert.False(t, called, "Ollama must not be called when regex matches")
+	assert.Equal(t, "Assets:Checking:FI5687", tx.SourceAccount)
+	assert.Equal(t, -100.0, tx.Amount)
 }

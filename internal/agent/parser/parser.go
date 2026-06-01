@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/ananthakumaran/paisa/internal/agent/config"
 )
 
 type ParsedTransaction struct {
@@ -25,10 +27,11 @@ type ParsedTransaction struct {
 type Parser struct {
 	url   string
 	model string
+	rules config.ParserRules
 }
 
-func New(url, model string) *Parser {
-	return &Parser{url: url, model: model}
+func New(url, model string, rules config.ParserRules) *Parser {
+	return &Parser{url: url, model: model, rules: rules}
 }
 
 var responseSchema = map[string]interface{}{
@@ -54,6 +57,10 @@ var multiSchema = map[string]interface{}{
 }
 
 func (p *Parser) Parse(rawText string, knownAccounts []string) (ParsedTransaction, error) {
+	if tx, ok := RegexParse(rawText, p.rules); ok {
+		return tx, nil
+	}
+
 	accountHint := ""
 	if len(knownAccounts) > 0 {
 		accountHint = fmt.Sprintf("\nKnown ledger accounts (choose suggested_ledger_account from these): %s",
