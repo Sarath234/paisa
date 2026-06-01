@@ -19,6 +19,7 @@ type ParsedTransaction struct {
 	TxType                 string  `json:"tx_type"`
 	SuggestedLedgerAccount string  `json:"suggested_ledger_account"`
 	Confidence             float64 `json:"confidence"`
+	SourceAccount          string  `json:"source_account,omitempty"`
 }
 
 type Parser struct {
