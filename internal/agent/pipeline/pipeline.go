@@ -36,7 +36,7 @@ func New(db *gorm.DB, cfg agentconfig.Config) *Pipeline {
 	return &Pipeline{
 		db:     db,
 		cfg:    cfg,
-		parser: parser.New(cfg.Ollama.URL, cfg.Ollama.Model),
+		parser: parser.New(cfg.Ollama.URL, cfg.Ollama.Model, cfg.ParserRules),
 		bot:    telegram.New(cfg.Telegram.BotToken, cfg.Telegram.ChatID),
 	}
 }
@@ -133,7 +133,10 @@ func (p *Pipeline) HandleCallback(callbackID, data string) {
 }
 
 func (p *Pipeline) post(tx parser.ParsedTransaction, source string) error {
-	debitAccount := p.resolveAccount(tx.Bank, tx.AccountLast4)
+	debitAccount := tx.SourceAccount
+	if debitAccount == "" {
+		debitAccount = p.resolveAccount(tx.Bank, tx.AccountLast4)
+	}
 	entry := journal.Format(tx, source, debitAccount)
 	if err := journal.Append(p.cfg.Paisa.JournalDir, entry); err != nil {
 		return fmt.Errorf("append journal: %w", err)
