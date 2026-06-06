@@ -1,0 +1,92 @@
+# paisa-agent.yaml — copy to ~/.config/paisa-agent/paisa-agent.yaml
+
+paisa:
+  url: http://localhost:7500
+  journal_dir: /path/to/your/journal
+  api_token: ""
+
+ollama:
+  url: http://localhost:11434
+  model: gemma3:12b
+
+telegram:
+  bot_token: "YOUR_BOT_TOKEN"
+  chat_id: 123456789
+
+gmail:
+  credentials_file: /path/to/credentials.json
+  poll_interval_seconds: 300
+  labels:
+    - INBOX
+
+merchant_rules:
+  auto_approve_threshold: 10000
+  promote_after_approvals: 3
+
+parser_rules:
+  day_parts:
+    breakfast_end: 11
+    lunch_end: 15
+    dinner_end: 20
+
+  # First keyword match wins. Empty keyword = catch-all (must be last).
+  merchants:
+    - keyword: swiggy
+      description: "Food: {day_part}"
+      account: "Expenses:Food:Hyd:Swiggy"
+    - keyword: zomato
+      description: "Food: {day_part}"
+      account: "Expenses:Food:Hyd:Zomato"
+    - keyword: zepto
+      description: "Groceries"
+      account: "Expenses:Groceries:Hyd"
+    - keyword: food
+      description: "Food: {day_part}"
+      account: "Expenses:Food:Hyd"
+    - keyword: ""
+      description: "Misc"
+      account: "Expenses:Misc:Hyd"
+
+  # First rule where ALL contains strings match wins.
+  # dest_account + description override merchant matching (fixed payees like EMI).
+  sources:
+    - id: fi_upi
+      contains: ["debited via UPI on"]
+      account: "Assets:Checking:FI5687"
+    - id: fi_upi_alt
+      contains: ["debited from your A/c via UPI on"]
+      account: "Assets:Checking:FI5687"
+    - id: fi_dc
+      contains: ["spent@"]
+      account: "Assets:Checking:FI5687"
+    - id: fi_dc_alt
+      contains: ["You've spent INR "]
+      account: "Assets:Checking:FI5687"
+    - id: axis_upi
+      contains: ["A/c no. XX6386"]
+      account: "Assets:Checking:AXIS6386"
+    - id: cc_fk
+      contains: ["Card no. XX8860"]
+      account: "Liabilities:CreditCard:FK8860"
+    - id: cc_mz
+      contains: ["Card no. XX1610"]
+      account: "Liabilities:CreditCard:MyZone1610"
+    - id: cc_select
+      contains: ["Card no. XX6792"]
+      account: "Liabilities:CreditCard:SELECT6792"
+    - id: food_card
+      contains: ["HDFC Bank Prepaid Card 2148"]
+      account: "Assets:Checking:FC2148"
+    - id: canara_loan
+      contains: ["XXXXX21343", "Canara Bank", "Loan Drawdown"]
+      account: "Assets:Checking:CANA1343"
+      dest_account: "Liabilities:Loan:CANAHL1090"
+      description: "EMI: Home Loan"
+    - id: jupiter
+      contains: ["XX6465"]
+      account: "Assets:Checking:JUPI5114"
+    - id: term_insurance
+      contains: ["Sarath M payment of Rs.1672 for your TATA AIA Life policy"]
+      account: "Assets:Checking:AXIS6386"
+      dest_account: "Expenses:Insurance:TATA0299"
+      description: "Insurance: Term Insurance Premium"
