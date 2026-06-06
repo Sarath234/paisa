@@ -35,6 +35,18 @@ html[data-theme="dark"] {
 
   @import "./app.scss";
 
+  // app.scss uses $grey-light (35% lightness in dark mode) for axis text,
+  // which is too dark to read on dark backgrounds. Override to lighter values.
+  .axis {
+    text {
+      fill: $grey-dark;   // hsl(0, 0%, 63%) — readable on dark bg
+    }
+
+    &.dark text {
+      fill: $grey-darker; // hsl(0, 0%, 78%) — used for category labels
+    }
+  }
+
   background: $white-bis;
 
   @include mobile {

@@ -418,6 +418,7 @@ export function renderCurrentExpensesBreakdown(z: d3.ScaleOrdinal<string, string
   const id = "#d3-current-month-breakdown";
   const BAR_HEIGHT = rem(20);
   const TEXT_WIDTH = rem(135);
+  let firstRender = true;
   const svg = d3.select(id),
     margin = { top: 0, right: rem(160), bottom: rem(20), left: rem(100) },
     width =
@@ -457,7 +458,9 @@ export function renderCurrentExpensesBreakdown(z: d3.ScaleOrdinal<string, string
     x.domain([0, d3.max(points, (p) => p.total)]);
     y.range([height, 0]);
 
-    const t = svg.transition().duration(750);
+    const duration = firstRender ? 0 : 750;
+    firstRender = false;
+    const t = svg.transition().duration(duration);
 
     xAxis
       .attr("transform", "translate(0," + height + ")")
