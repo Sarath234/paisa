@@ -13,6 +13,7 @@ type Config struct {
 	Gmail         GmailConfig         `yaml:"gmail"`
 	MerchantRules MerchantRulesConfig `yaml:"merchant_rules"`
 	ParserRules   ParserRules         `yaml:"parser_rules"`
+	Listen        string              `yaml:"listen"`
 }
 
 type PaisaConfig struct {
@@ -72,6 +73,7 @@ func DefaultConfig() Config {
 	return Config{
 		Paisa:  PaisaConfig{URL: "http://localhost:7500"},
 		Ollama: OllamaConfig{URL: "http://localhost:11434", Model: "gemma3:12b"},
+		Listen: "127.0.0.1:7501",
 		Gmail:  GmailConfig{PollIntervalSeconds: 300},
 		MerchantRules: MerchantRulesConfig{
 			AutoApproveThreshold:  10000,

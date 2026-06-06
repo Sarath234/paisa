@@ -1,14 +1,15 @@
 package server
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 
-	agentconfig "github.com/ananthakumaran/paisa/internal/agent/config"
-	"github.com/ananthakumaran/paisa/internal/agent/parser"
 	"github.com/gin-gonic/gin"
 )
+
+const agentParseURL = "http://127.0.0.1:7501/parse"
 
 func ParseSMS(c *gin.Context) {
 	var req struct {
@@ -19,23 +20,14 @@ func ParseSMS(c *gin.Context) {
 		return
 	}
 
-	cfgPath := filepath.Join(os.Getenv("HOME"), ".config", "paisa-agent", "paisa-agent.yaml")
-	cfg, err := agentconfig.Load(cfgPath)
+	body, _ := json.Marshal(req)
+	resp, err := http.Post(agentParseURL, "application/json", bytes.NewReader(body))
 	if err != nil {
-		cfg = agentconfig.DefaultConfig()
-	}
-
-	accounts := make([]string, 0, len(cfg.ParserRules.Sources))
-	for _, s := range cfg.ParserRules.Sources {
-		accounts = append(accounts, s.Account)
-	}
-
-	p := parser.New(cfg.Ollama.URL, cfg.Ollama.Model, cfg.ParserRules)
-	tx, err := p.Parse(req.Text, accounts)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": "paisa-agent not reachable: " + err.Error()})
 		return
 	}
+	defer resp.Body.Close()
 
-	c.JSON(http.StatusOK, tx)
+	data, _ := io.ReadAll(resp.Body)
+	c.Data(resp.StatusCode, "application/json", data)
 }

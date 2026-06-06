@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -110,6 +112,41 @@ func main() {
 			}
 		}()
 	}
+
+	// HTTP server for UI parse requests
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/parse", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			var req struct {
+				Text string `json:"text"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Text == "" {
+				http.Error(w, `{"error":"text is required"}`, http.StatusBadRequest)
+				return
+			}
+			tx, err := pipe.ParseText(req.Text)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(tx)
+		})
+		addr := cfg.Listen
+		if addr == "" {
+			addr = "127.0.0.1:7501"
+		}
+		log.Infof("paisa-agent HTTP listening on %s", addr)
+		if err := http.ListenAndServe(addr, mux); err != nil {
+			log.Errorf("paisa-agent HTTP server: %v", err)
+		}
+	}()
 
 	log.Infof("paisa-agent running, paisa URL: %s", cfg.Paisa.URL)
 	select {}

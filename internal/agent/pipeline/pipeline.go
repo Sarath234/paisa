@@ -46,6 +46,15 @@ func (p *Pipeline) Bot() *telegram.Bot {
 	return p.bot
 }
 
+// ParseText parses a raw SMS/notification string and returns the structured transaction.
+func (p *Pipeline) ParseText(rawText string) (parser.ParsedTransaction, error) {
+	accounts := make([]string, 0, len(p.cfg.ParserRules.Sources))
+	for _, s := range p.cfg.ParserRules.Sources {
+		accounts = append(accounts, s.Account)
+	}
+	return p.parser.Parse(rawText, accounts)
+}
+
 // Process parses rawText from source, deduplicates, gates on merchant rules,
 // and either auto-posts or sends a Telegram approval card.
 func (p *Pipeline) Process(rawText, source string) (Action, error) {
