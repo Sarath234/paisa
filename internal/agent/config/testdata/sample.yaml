@@ -1,0 +1,26 @@
+paisa:
+  url: http://localhost:7500
+  journal_dir: /tmp/journal
+
+ollama:
+  url: http://localhost:11434
+  model: gemma3:4b
+
+telegram:
+  bot_token: "test-token"
+  chat_id: 123456
+
+parser_rules:
+  accounts:
+    - bank: fixed
+      identifiers: ["CRD-PMNT", "8860"]
+      src: "Assets:Checking:AXIS6386"
+      destinations: "Liabilities:CreditCard:FK8860"
+      description: "CC Payment"
+    - bank: hdfc_debit
+      identifiers: ["HDFC Bank Card 2148"]
+      destinations: "Assets:Checking:FC2148"
+  merchants:
+    - keyword: "swiggy"
+      account: "Expenses:Food:Hyd"
+      description: "Food Swiggy"
