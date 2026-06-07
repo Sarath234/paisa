@@ -51,6 +51,10 @@ func main() {
 }
 
 func handleMessage(msg *telegram.Message, bot *telegram.Bot, store *approval.Store, cfg *config.Config) {
+	if msg.Chat.ID != cfg.Telegram.ChatID {
+		return
+	}
+
 	// If this chat has an entry in editing state, route as an edit reply.
 	if pending := store.GetEditingByChatID(msg.Chat.ID); pending != nil {
 		updated := telegram.ParseEditReply(msg.Text, pending.Entry)
@@ -117,6 +121,9 @@ func handleCallback(cb *telegram.CallbackQuery, bot *telegram.Bot, store *approv
 	bot.AnswerCallback(cb.ID)
 
 	if cb.Message == nil {
+		return
+	}
+	if cb.Message.Chat.ID != cfg.Telegram.ChatID {
 		return
 	}
 	msgID := cb.Message.MessageID

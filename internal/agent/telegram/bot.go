@@ -72,7 +72,7 @@ func (b *Bot) post(method string, payload any) (json.RawMessage, error) {
 	body, _ := json.Marshal(payload)
 	resp, err := b.client.Post(b.apiURL(method), "application/json", bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", method, err)
+		return nil, fmt.Errorf("%s: request failed", method)
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
