@@ -1,0 +1,120 @@
+// internal/agent/parser/banks_test.go
+package parser_test
+
+import (
+	"testing"
+
+	"github.com/ananthakumaran/paisa/internal/agent/parser"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestExtractIciciCC(t *testing.T) {
+	sms := "INR 453.00 spent using ICICI Bank Card XX6009 on 03-Jun-26 on AMAZON PAY IN G. Avl Limit: INR 4,59,509.36. If not you, call 1800 2662/SMS BLOCK 6009 to 9215676766"
+	m, d, a, debit, err := parser.ExtractIciciCC(sms)
+	assert.NoError(t, err)
+	assert.Equal(t, "AMAZON PAY IN G", m)
+	assert.Equal(t, "03-Jun-26", d)
+	assert.Equal(t, "453.00", a)
+	assert.True(t, debit)
+}
+
+func TestExtractHdfcDebit(t *testing.T) {
+	cases := []struct {
+		sms      string
+		merchant string
+		date     string
+		amt      string
+	}{
+		{
+			"Spent! INR INR 215 On HDFC Bank Card 2148 At RAZ*Swiggy/Bangalore On 03 Jun,2026 01:18 PM IST Bal INR INR 23216.37 To Block, Call 08069858585",
+			"RAZ*Swiggy/Bangalore", "03 Jun,2026", "215",
+		},
+		{
+			"Spent! INR INR 426 On HDFC Bank Card 2148 At BLINK COMMERCE PVT L On 02 Jun,2026 08:32 PM IST Bal INR INR 23431.37 To Block, Call 08069858585",
+			"BLINK COMMERCE PVT L", "02 Jun,2026", "426",
+		},
+		{
+			"Spent! INR INR 327.25 On HDFC Bank Card 2148 At ZOMATO/110018759//IN On 31 May,2026 10:28 PM IST Bal INR INR 9534.37 To Block, Call 08069858585",
+			"ZOMATO/110018759//IN", "31 May,2026", "327.25",
+		},
+	}
+	for _, c := range cases {
+		m, d, a, debit, err := parser.ExtractHdfcDebit(c.sms)
+		assert.NoError(t, err)
+		assert.Equal(t, c.merchant, m)
+		assert.Equal(t, c.date, d)
+		assert.Equal(t, c.amt, a)
+		assert.True(t, debit)
+	}
+}
+
+func TestExtractHdfcCC(t *testing.T) {
+	sms := "Spent Rs.341 On HDFC Bank Card 2527 At ZEPTO MARKETPLACE PRIV On 2026-05-21:07:32:56.Not You? To Block+Reissue Call 18002586161"
+	m, d, a, debit, err := parser.ExtractHdfcCC(sms)
+	assert.NoError(t, err)
+	assert.Equal(t, "ZEPTO MARKETPLACE PRIV", m)
+	assert.Equal(t, "2026-05-21", d)
+	assert.Equal(t, "341", a)
+	assert.True(t, debit)
+}
+
+func TestExtractAxisChecking(t *testing.T) {
+	sms := "INR 1804.05 debited\nA/c no. XX6386\n03-06-26, 10:21:54\nUPI/P2M/102154212206/IRCTC Rail Web\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank"
+	m, d, a, debit, err := parser.ExtractAxisChecking(sms)
+	assert.NoError(t, err)
+	assert.Equal(t, "IRCTC Rail Web", m)
+	assert.Equal(t, "03-06-26", d)
+	assert.Equal(t, "1804.05", a)
+	assert.True(t, debit)
+}
+
+func TestExtractAxisCC(t *testing.T) {
+	cases := []struct {
+		sms      string
+		merchant string
+		date     string
+		amt      string
+	}{
+		{
+			"Spent INR 210.12\nAxis Bank Card no. XX1610\n08-05-26 18:44:17 IST\nDISTRICT MO\nAvl Limit: INR 1389000.78\nNot you? SMS BLOCK 1610 to 919951860002",
+			"DISTRICT MO", "08-05-26", "210.12",
+		},
+		{
+			"Spent INR 11864\nAxis Bank Card no. XX6792\n23-05-26 23:30:19 IST\nFLIPKART\nAvl Limit: INR 1324182.46\nNot you? SMS BLOCK 6792 to 919951860002",
+			"FLIPKART", "23-05-26", "11864",
+		},
+		{
+			"Spent INR 3468\nAxis Bank Card no. XX8860\n01-06-26 15:22:40 IST\nIng*Flipkar\nAvl Limit: INR 1320714.46\nNot you? SMS BLOCK 8860 to 919951860002",
+			"Ing*Flipkar", "01-06-26", "3468",
+		},
+	}
+	for _, c := range cases {
+		m, d, a, debit, err := parser.ExtractAxisCC(c.sms)
+		assert.NoError(t, err)
+		assert.Equal(t, c.merchant, m)
+		assert.Equal(t, c.date, d)
+		assert.Equal(t, c.amt, a)
+		assert.True(t, debit)
+	}
+}
+
+func TestExtractIDFCChecking(t *testing.T) {
+	t.Run("spend", func(t *testing.T) {
+		sms := "Spent Rs.473.00 from A/C XX6977 at ZEPTO MARKETPLACE PRIV on 09/04/26. Not you? Call 180010888/SMS BLOCK (last 4 digit of card) to 5676732. IDFC FIRST Bank"
+		m, d, a, debit, err := parser.ExtractIDFCChecking(sms)
+		assert.NoError(t, err)
+		assert.Equal(t, "ZEPTO MARKETPLACE PRIV", m)
+		assert.Equal(t, "09/04/26", d)
+		assert.Equal(t, "473.00", a)
+		assert.True(t, debit)
+	})
+	t.Run("interest", func(t *testing.T) {
+		sms := "Monthly interest of INR.318.00 earned on your Savings A/c XX6977 has been credited to your A/C on 31/05/26. New bal: INR.1,50,101.05. IDFC FIRST Bank"
+		m, d, a, debit, err := parser.ExtractIDFCChecking(sms)
+		assert.NoError(t, err)
+		assert.Equal(t, "Monthly interest", m)
+		assert.Equal(t, "31/05/26", d)
+		assert.Equal(t, "318.00", a)
+		assert.False(t, debit)
+	})
+}
