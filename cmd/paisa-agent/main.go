@@ -57,11 +57,18 @@ func handleMessage(msg *telegram.Message, bot *telegram.Bot, store *approval.Sto
 
 	// If this chat has an entry in editing state, route as an edit reply.
 	if pending := store.GetEditingByChatID(msg.Chat.ID); pending != nil {
+		log.Debugf("message: routing as edit reply for msgID=%d", pending.MessageID)
 		updated := telegram.ParseEditReply(msg.Text, pending.Entry)
 		store.Delete(pending.MessageID)
 		sendDraft(updated, bot, store, cfg)
 		return
 	}
+
+	preview := msg.Text
+	if len(preview) > 80 {
+		preview = preview[:80] + "…"
+	}
+	log.Infof("message: new SMS received (len=%d): %q", len(msg.Text), preview)
 
 	// Otherwise treat the message text as a new bank SMS.
 	entry, err := parseAndFill(msg.Text, cfg)
@@ -70,6 +77,8 @@ func handleMessage(msg *telegram.Message, bot *telegram.Bot, store *approval.Sto
 		bot.SendText(fmt.Sprintf("❌ Could not parse: %v", err))
 		return
 	}
+	log.Infof("parse: success — date=%q desc=%q amt=%q src=%q dest=%q",
+		entry.Date, entry.Desc, entry.Amt, entry.Src, entry.Dest)
 	sendDraft(*entry, bot, store, cfg)
 }
 
@@ -78,11 +87,16 @@ func parseAndFill(sms string, cfg *config.Config) (*agentledger.Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Debugf("parse: classified as bank=%q destinations=%q", rule.Bank, rule.Destinations)
+
 	entry, err := parser.Parse(sms, rule, cfg.ParserRules.Merchants)
 	if err != nil {
 		return nil, err
 	}
-	if entry.Dest == "" || entry.Desc == "" {
+
+	needsLLM := entry.Dest == "" || entry.Desc == ""
+	if needsLLM {
+		log.Infof("parse: regex incomplete — desc=%q dest=%q — invoking LLM", entry.Desc, entry.Dest)
 		if llmErr := llm.FillMissing(sms, entry, cfg.Ollama); llmErr != nil {
 			log.Warnf("llm fallback: %v", llmErr)
 		}
@@ -100,6 +114,7 @@ func sendDraft(entry agentledger.Entry, bot *telegram.Bot, store *approval.Store
 
 	var msgID int
 	if dup {
+		log.Infof("draft: sending as duplicate (date=%q amt=%q)", entry.Date, entry.Amt)
 		msgID, err = bot.SendDraftDuplicate(draftText)
 	} else {
 		msgID, err = bot.SendDraft(draftText)
@@ -108,6 +123,7 @@ func sendDraft(entry agentledger.Entry, bot *telegram.Bot, store *approval.Store
 		log.Errorf("send draft: %v", err)
 		return
 	}
+	log.Debugf("draft: sent msgID=%d", msgID)
 
 	store.Set(&approval.Pending{
 		Entry:     entry,

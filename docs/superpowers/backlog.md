@@ -51,15 +51,6 @@ Background job compares actual vs budgeted spend per category. When any category
 
 ---
 
-### Enhancement 4 — Portfolio Rebalancing Calculator
-**Priority:** 6/10 | Complexity: Low | Impact: Medium
-
-Given current and target allocation, compute exact buy/sell amounts to reach target within a user-specified deposit/withdrawal. Render as a checklist of trades.
-
-**Files:** `internal/server/allocation.go` (add rebalancing math), `src/routes/(app)/assets/allocation/+page.svelte` (add "Rebalance" panel)
-
----
-
 ### Enhancement 5 — Transaction Document Attachments
 **Priority:** 4/10 | Complexity: High | Impact: Medium
 
@@ -69,24 +60,6 @@ Attach receipts/PDFs to transactions via ledger comment directives (`; attachmen
 
 ---
 
-
-### Enhancement 8 — Global Transaction Search
-**Priority:** 8/10 | Complexity: Low | Impact: High
-
-Full-text search across transactions by payee, account, amount, or note. A search bar in the nav that jumps to a filtered transaction list. SQLite FTS5 or simple LIKE query on the postings table is sufficient.
-
-**Files:** `internal/server/search.go` (new — `GET /api/search?q=`), `src/routes/(app)/search/+page.svelte` (new), `src/lib/components/NavSearch.svelte` (new)
-
----
-
-### Enhancement 9 — Spending Insights Feed
-**Priority:** 7/10 | Complexity: Medium | Impact: High
-
-Weekly/monthly auto-generated plain-English observations: "You spent ₹X on Y this month — Z% more than last month", "Your savings rate this month is N% — above your 6-month average." Renders as a card feed on the dashboard or a dedicated Insights page. All underlying data is already available.
-
-**Files:** `internal/server/insights.go` (new — generate observation structs), `src/routes/(app)/insights/+page.svelte` (new) or dashboard widget
-
----
 
 ### Enhancement 10 — Multiple Financial Goals with Projections
 **Priority:** 7/10 | Complexity: High | Impact: High
@@ -103,23 +76,6 @@ Expand the single Retirement goal to support multiple goals (home down payment, 
 Per-card monthly spend breakdown and category split on the Credit Cards page. Answers "which card is used for what?" and shows rewards-earned vs interest-paid summary. Data already flows through postings — needs aggregation and a chart.
 
 **Files:** `internal/server/liabilities/credit_cards.go` (add category breakdown query), `src/routes/(app)/liabilities/credit_cards/+page.svelte` (add breakdown panel)
-
----
-
-### Enhancement 17 — Net Worth Projection
-**Priority:** 8/10 | Complexity: Low | Impact: High
-**Status:** Spec written (`docs/superpowers/specs/2026-05-28-net-worth-projection-design.md`)
-
-New "Projection" page under Assets. Shows projected net worth and net investment lines N years forward, driven by current net worth, 12-month average monthly savings, and a user-adjustable return rate slider (6–18%, default 12%). Horizon toggle: 1Y/3Y/5Y/10Y.
-
-**Deferred sub-features (add to future enhancements when prioritised):**
-- Multiple scenario comparison (what-if sliders) → Enh 16
-- Inflation adjustment
-- Goal / milestone marker lines on chart
-- Per-asset-class return rates
-- ML/data-science savings prediction model
-
-**Files:** `internal/server/networth.go` (add `monthlySavings`), `src/lib/projection.ts` (new renderer), `src/routes/(app)/assets/projection/+page.svelte` (new page), `src/lib/components/Navbar.svelte`
 
 ---
 
@@ -148,3 +104,7 @@ Group the flat list of 600+ issues by type (negative balance, missing commodity 
 | Enh 2 | Cash Flow Forecasting | Built (spec + plan + code), PR #5/#6 closed — not in master |
 | Enh 6 | Quick Transaction Entry | `feat/quick-entry` merged to master; advanced features (OCR, voice, category prediction) deferred |
 | Enh 7 | Savings Rate Dashboard Widget | merged to master, tagged `v0.7.6` |
+| Enh 8 | Global Transaction Search | merged to master (`3f95501`) |
+| Enh 9 | Spending Insights Feed | merged to master (`ddd9f19`) |
+| Enh 17 | Net Worth Projection | merged to master via PR #11 (`f41e0a8`) |
+| Enh 4 | Portfolio Rebalancing Calculator | merged to master (`d0aae4a`) |

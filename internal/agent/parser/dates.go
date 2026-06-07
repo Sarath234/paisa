@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // dateExtractPatterns try each pattern in order; first match wins.
@@ -24,11 +26,13 @@ var dateExtractPatterns = []*regexp.Regexp{
 
 // ExtractDateFromSMS finds the first recognisable date in an SMS string.
 func ExtractDateFromSMS(sms string) (string, error) {
-	for _, re := range dateExtractPatterns {
+	for i, re := range dateExtractPatterns {
 		if m := re.FindStringSubmatch(sms); m != nil {
+			log.Debugf("date: pattern[%d] matched %q", i, m[1])
 			return m[1], nil
 		}
 	}
+	log.Debugf("date: no pattern matched (supported: DD-Mon-YY, DD Mon,YYYY, YYYY-MM-DD, DD-MM-YY, DD/MM/YY)")
 	return "", fmt.Errorf("no date found in SMS")
 }
 

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // ── ICICI Credit Card ───────────────────────────────────────────────────────
@@ -16,8 +18,10 @@ var iciciCCRe = regexp.MustCompile(
 func ExtractIciciCC(sms string) (merchant, rawDate, rawAmt string, isDebit bool, err error) {
 	m := iciciCCRe.FindStringSubmatch(sms)
 	if m == nil {
+		log.Debugf("icici_cc: regex no match — pattern expects 'INR <amt> spent using ... on <DD-Mon-YY> on <merchant>'")
 		return "", "", "", false, fmt.Errorf("icici_cc: no match")
 	}
+	log.Debugf("icici_cc: extracted rawAmt=%q rawDate=%q merchant=%q", m[1], m[2], strings.TrimSpace(m[3]))
 	return strings.TrimSpace(m[3]), m[2], m[1], true, nil
 }
 
@@ -30,8 +34,10 @@ var hdfcDebitRe = regexp.MustCompile(
 func ExtractHdfcDebit(sms string) (merchant, rawDate, rawAmt string, isDebit bool, err error) {
 	m := hdfcDebitRe.FindStringSubmatch(sms)
 	if m == nil {
+		log.Debugf("hdfc_debit: regex no match — pattern expects 'Spent! INR INR <amt> On HDFC Bank Card ... At <merchant> On <DD Mon,YYYY>'")
 		return "", "", "", false, fmt.Errorf("hdfc_debit: no match")
 	}
+	log.Debugf("hdfc_debit: extracted rawAmt=%q rawDate=%q merchant=%q", m[1], m[3], strings.TrimSpace(m[2]))
 	return strings.TrimSpace(m[2]), m[3], m[1], true, nil
 }
 
@@ -44,8 +50,10 @@ var hdfcCCRe = regexp.MustCompile(
 func ExtractHdfcCC(sms string) (merchant, rawDate, rawAmt string, isDebit bool, err error) {
 	m := hdfcCCRe.FindStringSubmatch(sms)
 	if m == nil {
+		log.Debugf("hdfc_cc: regex no match — pattern expects 'Spent Rs.<amt> On HDFC Bank Card ... At <merchant> On <YYYY-MM-DD>'")
 		return "", "", "", false, fmt.Errorf("hdfc_cc: no match")
 	}
+	log.Debugf("hdfc_cc: extracted rawAmt=%q rawDate=%q merchant=%q", m[1], m[3], strings.TrimSpace(m[2]))
 	return strings.TrimSpace(m[2]), m[3], m[1], true, nil
 }
 
@@ -59,17 +67,24 @@ var axisChkUPIRe = regexp.MustCompile(`(?i)(UPI/[^\n]+)`)
 func ExtractAxisChecking(sms string) (merchant, rawDate, rawAmt string, isDebit bool, err error) {
 	amtM := axisChkAmtRe.FindStringSubmatch(sms)
 	if amtM == nil {
+		log.Debugf("axis_checking: no amount match — pattern expects 'INR <amt> debited/credited'")
 		return "", "", "", false, fmt.Errorf("axis_checking: no amount")
 	}
 	dateM := axisChkDateRe.FindStringSubmatch(sms)
 	if dateM == nil {
+		log.Debugf("axis_checking: no date match — rawAmt=%q; pattern expects DD-MM-YY", amtM[1])
 		return "", "", "", false, fmt.Errorf("axis_checking: no date")
 	}
 	merchantStr := ""
 	if upiM := axisChkUPIRe.FindStringSubmatch(sms); upiM != nil {
 		merchantStr = extractUPIMerchant(upiM[1])
+		log.Debugf("axis_checking: UPI ref=%q → merchant=%q", upiM[1], merchantStr)
+	} else {
+		log.Debugf("axis_checking: no UPI ref found — merchant will be empty (LLM fallback)")
 	}
-	return merchantStr, dateM[1], amtM[1], strings.ToLower(amtM[2]) == "debited", nil
+	debit := strings.ToLower(amtM[2]) == "debited"
+	log.Debugf("axis_checking: rawAmt=%q rawDate=%q isDebit=%v merchant=%q", amtM[1], dateM[1], debit, merchantStr)
+	return merchantStr, dateM[1], amtM[1], debit, nil
 }
 
 // extractUPIMerchant returns the human-readable part after the numeric reference ID.
@@ -105,6 +120,7 @@ var axisDateLineRe = regexp.MustCompile(`^(\d{2}-\d{2}-\d{2})\s`)
 func ExtractAxisCC(sms string) (merchant, rawDate, rawAmt string, isDebit bool, err error) {
 	amtM := axisSpentRe.FindStringSubmatch(sms)
 	if amtM == nil {
+		log.Debugf("axis_cc: no amount match — pattern expects SMS to start with 'Spent INR <amt>'")
 		return "", "", "", false, fmt.Errorf("axis_cc: no amount")
 	}
 
@@ -118,10 +134,13 @@ func ExtractAxisCC(sms string) (merchant, rawDate, rawAmt string, isDebit bool, 
 		}
 	}
 	if rawDate == "" || merchantLineIdx < 0 || merchantLineIdx >= len(lines) {
+		log.Debugf("axis_cc: no date/merchant line found — rawAmt=%q, %d lines scanned", amtM[1], len(lines))
 		return "", "", "", false, fmt.Errorf("axis_cc: no date or merchant line")
 	}
 
-	return strings.TrimSpace(lines[merchantLineIdx]), rawDate, amtM[1], true, nil
+	merchantStr := strings.TrimSpace(lines[merchantLineIdx])
+	log.Debugf("axis_cc: rawAmt=%q rawDate=%q merchant=%q", amtM[1], rawDate, merchantStr)
+	return merchantStr, rawDate, amtM[1], true, nil
 }
 
 // ── IDFC FIRST Bank Checking ─────────────────────────────────────────────────
@@ -135,10 +154,13 @@ var idfcInterestRe = regexp.MustCompile(
 
 func ExtractIDFCChecking(sms string) (merchant, rawDate, rawAmt string, isDebit bool, err error) {
 	if m := idfcSpendRe.FindStringSubmatch(sms); m != nil {
+		log.Debugf("idfc_checking: spend match — rawAmt=%q rawDate=%q merchant=%q", m[1], m[3], strings.TrimSpace(m[2]))
 		return strings.TrimSpace(m[2]), m[3], m[1], true, nil
 	}
 	if m := idfcInterestRe.FindStringSubmatch(sms); m != nil {
+		log.Debugf("idfc_checking: interest match — rawAmt=%q rawDate=%q", m[1], m[2])
 		return "Monthly interest", m[2], m[1], false, nil
 	}
+	log.Debugf("idfc_checking: no match — patterns expect 'Spent Rs.<amt> from A/C ... at <merchant> on DD/MM/YY' or interest credit")
 	return "", "", "", false, fmt.Errorf("idfc_checking: no match")
 }

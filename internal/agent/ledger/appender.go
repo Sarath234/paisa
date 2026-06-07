@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const autoImportFile = "auto-import.ledger"
@@ -19,6 +21,7 @@ var appendMu sync.Mutex
 func EnsureFile(journalDir string) error {
 	autoPath := filepath.Join(journalDir, autoImportFile)
 	if _, err := os.Stat(autoPath); os.IsNotExist(err) {
+		log.Infof("ledger: creating %s", autoPath)
 		if err := os.WriteFile(autoPath, []byte("; Auto-imported transactions\n\n"), 0644); err != nil {
 			return fmt.Errorf("create %s: %w", autoImportFile, err)
 		}
@@ -64,6 +67,7 @@ func IsDuplicate(journalDir string, e *Entry) (bool, error) {
 	autoPath := filepath.Join(journalDir, autoImportFile)
 	data, err := os.ReadFile(autoPath)
 	if os.IsNotExist(err) {
+		log.Debugf("dedup: %s not found — treating as no duplicate", autoImportFile)
 		return false, nil
 	}
 	if err != nil {
@@ -73,6 +77,10 @@ func IsDuplicate(journalDir string, e *Entry) (bool, error) {
 	start := 0
 	if len(lines) > dupScanLines {
 		start = len(lines) - dupScanLines
+		log.Debugf("dedup: scanning last %d of %d lines for date=%q src=%q amt=%q",
+			dupScanLines, len(lines), e.Date, e.Src, e.Amt)
+	} else {
+		log.Debugf("dedup: scanning %d lines for date=%q src=%q amt=%q", len(lines), e.Date, e.Src, e.Amt)
 	}
 	for i, line := range lines[start:] {
 		if strings.HasPrefix(line, e.Date) {
@@ -82,11 +90,13 @@ func IsDuplicate(journalDir string, e *Entry) (bool, error) {
 			}
 			for _, nextLine := range lines[start:][i+1 : end] {
 				if strings.Contains(nextLine, e.Src) && strings.Contains(nextLine, e.Amt) {
+					log.Warnf("dedup: duplicate found — date=%q src=%q amt=%q", e.Date, e.Src, e.Amt)
 					return true, nil
 				}
 			}
 		}
 	}
+	log.Debugf("dedup: no duplicate found")
 	return false, nil
 }
 
@@ -101,5 +111,11 @@ func Append(journalDir string, e *Entry) error {
 	}
 	defer f.Close()
 	_, err = fmt.Fprintf(f, "\n%s\n", e.Format())
-	return err
+	if err != nil {
+		log.Errorf("ledger: write failed to %s: %v", autoPath, err)
+		return err
+	}
+	log.Infof("ledger: appended entry date=%q desc=%q amt=%q src=%q dest=%q",
+		e.Date, e.Desc, e.Amt, e.Src, e.Dest)
+	return nil
 }
