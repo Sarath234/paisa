@@ -29,7 +29,7 @@ parser_rules:
     # ── Fixed routes ────────────────────────────────────────────────────────
 
     - bank: fixed
-      identifiers: ["CRD-PMNT", "8860"]
+      identifiers: ["CRD-PMNT", "1234"]
       src: "Assets:Checking:YOUR_CHECKING"
       destinations: "Liabilities:CreditCard:YOUR_CC"
       description: "CC Payment"
@@ -37,28 +37,28 @@ parser_rules:
     # ── Format entries ──────────────────────────────────────────────────────
 
     - bank: icici_cc
-      identifiers: ["ICICI Bank Card XX6009"]
-      destinations: "Liabilities:CreditCard:ICIC6009"
+      identifiers: ["ICICI Bank Card XX4567"]
+      destinations: "Liabilities:CreditCard:ICIC4567"
 
     - bank: hdfc_debit
-      identifiers: ["HDFC Bank Card 2148"]
-      destinations: "Assets:Checking:HDFC2148"
+      identifiers: ["HDFC Bank Card 8901"]
+      destinations: "Assets:Checking:HDFC8901"
 
     - bank: hdfc_cc
-      identifiers: ["HDFC Bank Card 2527"]
-      destinations: "Liabilities:CreditCard:HDFC2527"
+      identifiers: ["HDFC Bank Card 2345"]
+      destinations: "Liabilities:CreditCard:HDFC2345"
 
     - bank: axis_checking
-      identifiers: ["A/c no. XX6386"]
-      destinations: "Assets:Checking:AXIS6386"
+      identifiers: ["A/c no. XX6789"]
+      destinations: "Assets:Checking:AXIS6789"
 
     - bank: axis_cc
-      identifiers: ["Card no. XX8860"]
-      destinations: "Liabilities:CreditCard:AXIS8860"
+      identifiers: ["Card no. XX0123"]
+      destinations: "Liabilities:CreditCard:AXIS0123"
 
     - bank: idfc_checking
-      identifiers: ["XX6977"]
-      destinations: "Assets:Checking:IDFC6977"
+      identifiers: ["XX4567"]
+      destinations: "Assets:Checking:IDFC4567"
 
   # ── Merchant routing rules ─────────────────────────────────────────────────
   # keyword: case-insensitive substring match against the extracted merchant name
