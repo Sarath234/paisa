@@ -20,7 +20,7 @@ var testAccounts = []config.AccountRule{
 	{Bank: "icici_cc", Identifiers: []string{"ICICI Bank Card XX6009"}, Destinations: "Liabilities:CreditCard:ICICI6009"},
 	{Bank: "hdfc_debit", Identifiers: []string{"HDFC Bank Card 2148"}, Destinations: "Assets:Checking:FC2148"},
 	{Bank: "hdfc_cc", Identifiers: []string{"HDFC Bank Card 2527"}, Destinations: "Liabilities:CreditCard:HDFC2527"},
-	{Bank: "axis_checking", Identifiers: []string{"A/c no. XX6386"}, Destinations: "Assets:Checking:AXIS6386"},
+	{Bank: "axis_checking", Identifiers: []string{"XX6386"}, Destinations: "Assets:Checking:AXIS6386"},
 	{Bank: "axis_cc", Identifiers: []string{"Card no. XX1610"}, Destinations: "Liabilities:CreditCard:MyZone1610"},
 	{Bank: "axis_cc", Identifiers: []string{"Card no. XX6792"}, Destinations: "Liabilities:CreditCard:SELECT6792"},
 	{Bank: "axis_cc", Identifiers: []string{"Card no. XX8860"}, Destinations: "Liabilities:CreditCard:FK8860"},

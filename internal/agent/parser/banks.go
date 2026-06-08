@@ -58,21 +58,34 @@ func ExtractHdfcCC(sms string) (merchant, rawDate, rawAmt string, isDebit bool, 
 }
 
 // ── Axis Bank Checking ───────────────────────────────────────────────────────
-// "INR 1804.05 debited\nA/c no. XX6386\n03-06-26, 10:21:54\nUPI/P2M/102154212206/IRCTC Rail Web\n..."
+// Format A: "INR 1804.05 debited\nA/c no. XX6386\n03-06-26, 10:21:54\nUPI/P2M/.../IRCTC Rail Web\n..."
+// Format B: "Debit INR 12500.00\nAxis Bank A/c XX6386\n08-06-26 05:44:19\nBRN-SI-...\n..."
 
+// amtRe matches Format A: amount comes before "debited"/"credited"
 var axisChkAmtRe = regexp.MustCompile(`(?i)INR\s+([\d,]+(?:\.\d{1,2})?)\s+(debited|credited)`)
+
+// amtRe2 matches Format B: "Debit"/"Credit" prefix before "INR <amount>"
+var axisChkAmtRe2 = regexp.MustCompile(`(?i)^(debit|credit)\s+INR\s+([\d,]+(?:\.\d{1,2})?)`)
+
 var axisChkDateRe = regexp.MustCompile(`\b(\d{2}-\d{2}-\d{2})\b`)
 var axisChkUPIRe = regexp.MustCompile(`(?i)(UPI/[^\n]+)`)
 
 func ExtractAxisChecking(sms string) (merchant, rawDate, rawAmt string, isDebit bool, err error) {
-	amtM := axisChkAmtRe.FindStringSubmatch(sms)
-	if amtM == nil {
-		log.Debugf("axis_checking: no amount match — pattern expects 'INR <amt> debited/credited'")
+	var debit bool
+	if amtM := axisChkAmtRe.FindStringSubmatch(sms); amtM != nil {
+		rawAmt = amtM[1]
+		debit = strings.ToLower(amtM[2]) == "debited"
+	} else if amtM2 := axisChkAmtRe2.FindStringSubmatch(sms); amtM2 != nil {
+		rawAmt = amtM2[2]
+		debit = strings.ToLower(amtM2[1]) == "debit"
+	} else {
+		log.Debugf("axis_checking: no amount match — expected 'INR <amt> debited/credited' or 'Debit/Credit INR <amt>'")
 		return "", "", "", false, fmt.Errorf("axis_checking: no amount")
 	}
+
 	dateM := axisChkDateRe.FindStringSubmatch(sms)
 	if dateM == nil {
-		log.Debugf("axis_checking: no date match — rawAmt=%q; pattern expects DD-MM-YY", amtM[1])
+		log.Debugf("axis_checking: no date match — rawAmt=%q; pattern expects DD-MM-YY", rawAmt)
 		return "", "", "", false, fmt.Errorf("axis_checking: no date")
 	}
 	merchantStr := ""
@@ -82,9 +95,8 @@ func ExtractAxisChecking(sms string) (merchant, rawDate, rawAmt string, isDebit 
 	} else {
 		log.Debugf("axis_checking: no UPI ref found — merchant will be empty (LLM fallback)")
 	}
-	debit := strings.ToLower(amtM[2]) == "debited"
-	log.Debugf("axis_checking: rawAmt=%q rawDate=%q isDebit=%v merchant=%q", amtM[1], dateM[1], debit, merchantStr)
-	return merchantStr, dateM[1], amtM[1], debit, nil
+	log.Debugf("axis_checking: rawAmt=%q rawDate=%q isDebit=%v merchant=%q", rawAmt, dateM[1], debit, merchantStr)
+	return merchantStr, dateM[1], rawAmt, debit, nil
 }
 
 // extractUPIMerchant returns the human-readable part after the numeric reference ID.
