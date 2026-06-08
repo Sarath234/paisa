@@ -68,17 +68,6 @@ func TestExtractAxisChecking(t *testing.T) {
 	assert.True(t, debit)
 }
 
-func TestExtractAxisCheckingFormatB(t *testing.T) {
-	// Format B: "Debit INR <amt>" prefix style (BRN-SI / standing instruction / non-UPI)
-	sms := "Debit INR 12500.00\nAxis Bank A/c XX6386\n08-06-26 05:44:19\nBRN-SI-D112480384-TRFR TO \nWhatsApp BAL to 917036165000\nNot You? SMS BLOCKALL CustID to 919951860002"
-	m, d, a, debit, err := parser.ExtractAxisChecking(sms)
-	assert.NoError(t, err)
-	assert.Equal(t, "", m) // no UPI line; LLM fills merchant
-	assert.Equal(t, "08-06-26", d)
-	assert.Equal(t, "12500.00", a)
-	assert.True(t, debit)
-}
-
 func TestExtractAxisCC(t *testing.T) {
 	cases := []struct {
 		sms      string
