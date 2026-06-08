@@ -1740,36 +1740,9 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#enhancement-4-portfolio-rebalancing-calculator" class="md-nav__link">
-    <span class="md-ellipsis">
-      Enhancement 4 — Portfolio Rebalancing Calculator
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#enhancement-5-transaction-document-attachments" class="md-nav__link">
     <span class="md-ellipsis">
       Enhancement 5 — Transaction Document Attachments
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#enhancement-8-global-transaction-search" class="md-nav__link">
-    <span class="md-ellipsis">
-      Enhancement 8 — Global Transaction Search
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#enhancement-9-spending-insights-feed" class="md-nav__link">
-    <span class="md-ellipsis">
-      Enhancement 9 — Spending Insights Feed
     </span>
   </a>
   
@@ -1788,15 +1761,6 @@
   <a href="#enhancement-11-credit-card-spend-analysis" class="md-nav__link">
     <span class="md-ellipsis">
       Enhancement 11 — Credit Card Spend Analysis
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#enhancement-17-net-worth-projection" class="md-nav__link">
-    <span class="md-ellipsis">
-      Enhancement 17 — Net Worth Projection
     </span>
   </a>
   
@@ -1880,25 +1844,10 @@
 <p>Background job compares actual vs budgeted spend per category. When any category exceeds a configurable threshold %, emit a webhook POST or send email.</p>
 <p><strong>Files:</strong> <code>internal/config/config.go</code> (add <code>AlertRules</code>), <code>internal/server/alerts.go</code> (new), <code>src/routes/(app)/more/config/+page.svelte</code></p>
 <hr />
-<h3 id="enhancement-4-portfolio-rebalancing-calculator">Enhancement 4 — Portfolio Rebalancing Calculator<a class="headerlink" href="#enhancement-4-portfolio-rebalancing-calculator" title="Permanent link">&para;</a></h3>
-<p><strong>Priority:</strong> 6/10 | Complexity: Low | Impact: Medium</p>
-<p>Given current and target allocation, compute exact buy/sell amounts to reach target within a user-specified deposit/withdrawal. Render as a checklist of trades.</p>
-<p><strong>Files:</strong> <code>internal/server/allocation.go</code> (add rebalancing math), <code>src/routes/(app)/assets/allocation/+page.svelte</code> (add "Rebalance" panel)</p>
-<hr />
 <h3 id="enhancement-5-transaction-document-attachments">Enhancement 5 — Transaction Document Attachments<a class="headerlink" href="#enhancement-5-transaction-document-attachments" title="Permanent link">&para;</a></h3>
 <p><strong>Priority:</strong> 4/10 | Complexity: High | Impact: Medium</p>
 <p>Attach receipts/PDFs to transactions via ledger comment directives (<code>; attachment: receipts/file.pdf</code>). Editor shows paperclip icon; Paisa serves the file.</p>
 <p><strong>Files:</strong> <code>internal/ledger/ledger.go</code> (parse <code>; attachment:</code> directives), <code>internal/server/editor.go</code> (add <code>GET /api/attachment/:path</code>), <code>src/routes/(app)/ledger/editor/[slug]/+page.svelte</code></p>
-<hr />
-<h3 id="enhancement-8-global-transaction-search">Enhancement 8 — Global Transaction Search<a class="headerlink" href="#enhancement-8-global-transaction-search" title="Permanent link">&para;</a></h3>
-<p><strong>Priority:</strong> 8/10 | Complexity: Low | Impact: High</p>
-<p>Full-text search across transactions by payee, account, amount, or note. A search bar in the nav that jumps to a filtered transaction list. SQLite FTS5 or simple LIKE query on the postings table is sufficient.</p>
-<p><strong>Files:</strong> <code>internal/server/search.go</code> (new — <code>GET /api/search?q=</code>), <code>src/routes/(app)/search/+page.svelte</code> (new), <code>src/lib/components/NavSearch.svelte</code> (new)</p>
-<hr />
-<h3 id="enhancement-9-spending-insights-feed">Enhancement 9 — Spending Insights Feed<a class="headerlink" href="#enhancement-9-spending-insights-feed" title="Permanent link">&para;</a></h3>
-<p><strong>Priority:</strong> 7/10 | Complexity: Medium | Impact: High</p>
-<p>Weekly/monthly auto-generated plain-English observations: "You spent ₹X on Y this month — Z% more than last month", "Your savings rate this month is N% — above your 6-month average." Renders as a card feed on the dashboard or a dedicated Insights page. All underlying data is already available.</p>
-<p><strong>Files:</strong> <code>internal/server/insights.go</code> (new — generate observation structs), <code>src/routes/(app)/insights/+page.svelte</code> (new) or dashboard widget</p>
 <hr />
 <h3 id="enhancement-10-multiple-financial-goals-with-projections">Enhancement 10 — Multiple Financial Goals with Projections<a class="headerlink" href="#enhancement-10-multiple-financial-goals-with-projections" title="Permanent link">&para;</a></h3>
 <p><strong>Priority:</strong> 7/10 | Complexity: High | Impact: High</p>
@@ -1909,18 +1858,6 @@
 <p><strong>Priority:</strong> 6/10 | Complexity: Low | Impact: Medium</p>
 <p>Per-card monthly spend breakdown and category split on the Credit Cards page. Answers "which card is used for what?" and shows rewards-earned vs interest-paid summary. Data already flows through postings — needs aggregation and a chart.</p>
 <p><strong>Files:</strong> <code>internal/server/liabilities/credit_cards.go</code> (add category breakdown query), <code>src/routes/(app)/liabilities/credit_cards/+page.svelte</code> (add breakdown panel)</p>
-<hr />
-<h3 id="enhancement-17-net-worth-projection">Enhancement 17 — Net Worth Projection<a class="headerlink" href="#enhancement-17-net-worth-projection" title="Permanent link">&para;</a></h3>
-<p><strong>Priority:</strong> 8/10 | Complexity: Low | Impact: High
-<strong>Status:</strong> Spec written (<code>docs/superpowers/specs/2026-05-28-net-worth-projection-design.md</code>)</p>
-<p>New "Projection" page under Assets. Shows projected net worth and net investment lines N years forward, driven by current net worth, 12-month average monthly savings, and a user-adjustable return rate slider (6–18%, default 12%). Horizon toggle: 1Y/3Y/5Y/10Y.</p>
-<p><strong>Deferred sub-features (add to future enhancements when prioritised):</strong>
-- Multiple scenario comparison (what-if sliders) → Enh 16
-- Inflation adjustment
-- Goal / milestone marker lines on chart
-- Per-asset-class return rates
-- ML/data-science savings prediction model</p>
-<p><strong>Files:</strong> <code>internal/server/networth.go</code> (add <code>monthlySavings</code>), <code>src/lib/projection.ts</code> (new renderer), <code>src/routes/(app)/assets/projection/+page.svelte</code> (new page), <code>src/lib/components/Navbar.svelte</code></p>
 <hr />
 <h3 id="enhancement-12-doctor-page-triage">Enhancement 12 — Doctor Page Triage<a class="headerlink" href="#enhancement-12-doctor-page-triage" title="Permanent link">&para;</a></h3>
 <p><strong>Priority:</strong> 5/10 | Complexity: Low | Impact: Medium</p>
@@ -1996,6 +1933,26 @@
 <td>Enh 7</td>
 <td>Savings Rate Dashboard Widget</td>
 <td>merged to master, tagged <code>v0.7.6</code></td>
+</tr>
+<tr>
+<td>Enh 8</td>
+<td>Global Transaction Search</td>
+<td>merged to master (<code>3f95501</code>)</td>
+</tr>
+<tr>
+<td>Enh 9</td>
+<td>Spending Insights Feed</td>
+<td>merged to master (<code>ddd9f19</code>)</td>
+</tr>
+<tr>
+<td>Enh 17</td>
+<td>Net Worth Projection</td>
+<td>merged to master via PR #11 (<code>f41e0a8</code>)</td>
+</tr>
+<tr>
+<td>Enh 4</td>
+<td>Portfolio Rebalancing Calculator</td>
+<td>merged to master (<code>d0aae4a</code>)</td>
 </tr>
 </tbody>
 </table>

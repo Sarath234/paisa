@@ -12,7 +12,7 @@
         <meta name="author" content="Anantha Kumaran">
       
       
-        <link rel="canonical" href="https://paisa.fyi/superpowers/specs/2026-05-30-ingestion-agent-design/">
+        <link rel="canonical" href="https://paisa.fyi/superpowers/specs/2026-06-07-auto-ingest-transactions-design/">
       
       
       
@@ -22,7 +22,7 @@
     
     
       
-        <title>Paisa Ingestion Agent — Design Spec - Paisa</title>
+        <title>Auto-Ingest Transactions Design - Paisa</title>
       
     
     
@@ -94,7 +94,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#paisa-ingestion-agent-design-spec" class="md-skip">
+        <a href="#auto-ingest-transactions-design" class="md-skip">
           Skip to content
         </a>
       
@@ -145,7 +145,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Paisa Ingestion Agent — Design Spec
+              Auto-Ingest Transactions Design
             
           </span>
         </div>
@@ -1679,46 +1679,55 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#goal" class="md-nav__link">
+  <a href="#overview" class="md-nav__link">
     <span class="md-ellipsis">
-      Goal
+      Overview
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#architecture-overview" class="md-nav__link">
+  <a href="#pipeline" class="md-nav__link">
     <span class="md-ellipsis">
-      Architecture Overview
+      Pipeline
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#sources" class="md-nav__link">
+  <a href="#architecture" class="md-nav__link">
     <span class="md-ellipsis">
-      Sources
+      Architecture
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Sources">
+    <nav class="md-nav" aria-label="Architecture">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#gmail-rest-api" class="md-nav__link">
+  <a href="#binary" class="md-nav__link">
     <span class="md-ellipsis">
-      Gmail (REST API)
+      Binary
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#telegram-sms-relay" class="md-nav__link">
+  <a href="#package-layout" class="md-nav__link">
     <span class="md-ellipsis">
-      Telegram (SMS relay)
+      Package Layout
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#entry-struct" class="md-nav__link">
+    <span class="md-ellipsis">
+      Entry Struct
     </span>
   </a>
   
@@ -1730,81 +1739,156 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#parsing" class="md-nav__link">
+  <a href="#config-paisa-agentyaml" class="md-nav__link">
     <span class="md-ellipsis">
-      Parsing
+      Config (paisa-agent.yaml)
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#deduplication" class="md-nav__link">
+  <a href="#parser-strategy" class="md-nav__link">
     <span class="md-ellipsis">
-      Deduplication
+      Parser Strategy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Parser Strategy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#classification" class="md-nav__link">
+    <span class="md-ellipsis">
+      Classification
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed-route-extraction" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fixed Route Extraction
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#format-route-extraction" class="md-nav__link">
+    <span class="md-ellipsis">
+      Format Route Extraction
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#date-normalisation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Date Normalisation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#merchant-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Merchant Routing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#llm-fallback" class="md-nav__link">
+    <span class="md-ellipsis">
+      LLM Fallback
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#telegram-approval-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Telegram Approval Flow
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Telegram Approval Flow">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#draft-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Draft Format
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#state-machine" class="md-nav__link">
+    <span class="md-ellipsis">
+      State Machine
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#edit-reply-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Edit Reply Format
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-append" class="md-nav__link">
+    <span class="md-ellipsis">
+      File Append
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#merchant-rule-engine-smart-gate" class="md-nav__link">
+  <a href="#per-message-walkthrough" class="md-nav__link">
     <span class="md-ellipsis">
-      Merchant Rule Engine (Smart Gate)
+      Per-Message Walkthrough
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#journal-writing" class="md-nav__link">
+  <a href="#yaml-fixes-required-before-implementation" class="md-nav__link">
     <span class="md-ellipsis">
-      Journal Writing
+      YAML Fixes Required Before Implementation
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#month-end-statement-reconciliation" class="md-nav__link">
+  <a href="#out-of-scope" class="md-nav__link">
     <span class="md-ellipsis">
-      Month-end Statement Reconciliation
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      Configuration
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#binary-and-service" class="md-nav__link">
-    <span class="md-ellipsis">
-      Binary and Service
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#paisa-changes" class="md-nav__link">
-    <span class="md-ellipsis">
-      Paisa Changes
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#out-of-scope-this-spec" class="md-nav__link">
-    <span class="md-ellipsis">
-      Out of Scope (this spec)
+      Out of Scope
     </span>
   </a>
   
@@ -1829,223 +1913,388 @@
   
 
 
-<h1 id="paisa-ingestion-agent-design-spec">Paisa Ingestion Agent — Design Spec<a class="headerlink" href="#paisa-ingestion-agent-design-spec" title="Permanent link">&para;</a></h1>
-<h2 id="goal">Goal<a class="headerlink" href="#goal" title="Permanent link">&para;</a></h2>
-<p>Automate transaction ingestion from bank SMS alerts, Gmail transaction emails, and monthly bank statements into Paisa's ledger journal — with smart approval gating via Telegram — while making zero changes to the Paisa binary.</p>
-<hr />
-<h2 id="architecture-overview">Architecture Overview<a class="headerlink" href="#architecture-overview" title="Permanent link">&para;</a></h2>
-<p>A standalone Go binary <code>paisa-agent</code> runs as a macOS launchd service on the same machine as Paisa. It has no shared code with Paisa. The only coupling is:</p>
-<ol>
-<li><strong>Write access</strong> to <code>auto-imported.journal</code> — a plain hledger text file included by the main journal</li>
-<li><strong>HTTP call</strong> to Paisa's existing <code>POST /api/sync</code> after each write</li>
-</ol>
-<p>If the agent is down, Paisa continues working normally. Manual entry continues to work. Nothing breaks.</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>iPhone SMS
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  → iPhone Shortcut (fires on bank sender IDs)
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>  → Telegram Bot (user&#39;s private bot)
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>  → paisa-agent (long-polls Telegram getUpdates every 2s)
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>Gmail
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>  → paisa-agent polls Gmail REST API every 5 min
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>  → detects: alert email (parse body) vs statement email (parse PDF attachment)
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>Both paths → Ollama (local Gamma model, JSON schema) → normalized Transaction
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>           → Dedup check (agent.db: imported_refs)
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>           → Merchant gate (agent.db: merchant_rules)
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>               known + below threshold → append to auto-imported.journal → POST /api/sync
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>               unknown / high-value   → Telegram approval card → on ✓ → same write path
+<h1 id="auto-ingest-transactions-design">Auto-Ingest Transactions Design<a class="headerlink" href="#auto-ingest-transactions-design" title="Permanent link">&para;</a></h1>
+<p><strong>Date:</strong> 2026-06-07<br />
+<strong>Branch:</strong> feat/auto-ingest-trans<br />
+<strong>Status:</strong> Approved for implementation</p>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>A standalone Go sidecar (<code>paisa-agent</code>) that ingests bank SMS messages forwarded via iPhone Shortcuts → Telegram bot, parses them into ledger journal entries, sends a Telegram approval draft, and on approval appends to <code>auto-import.ledger</code>.</p>
+<h2 id="pipeline">Pipeline<a class="headerlink" href="#pipeline" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Bank SMS → iPhone Shortcuts → Telegram message → paisa-agent polls →
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>regex parse → (LLM fallback) → Telegram draft + inline buttons →
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>✅ Approve → append to auto-import.ledger
 </span></code></pre></div>
-<hr />
-<h2 id="sources">Sources<a class="headerlink" href="#sources" title="Permanent link">&para;</a></h2>
-<h3 id="gmail-rest-api">Gmail (REST API)<a class="headerlink" href="#gmail-rest-api" title="Permanent link">&para;</a></h3>
-<p>The agent polls Gmail using the <strong>Gmail REST API v1</strong> with OAuth2 service credentials (one-time browser auth to generate <code>~/.config/paisa-agent/gmail-token.json</code>). It filters by a configurable label or sender list (e.g. labels: <code>bank</code>, <code>finance</code>, or senders: <code>alerts@hdfcbank.net</code>).</p>
+<h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
+<h3 id="binary">Binary<a class="headerlink" href="#binary" title="Permanent link">&para;</a></h3>
+<p><code>cmd/paisa-agent/main.go</code> — loads config, starts Telegram long-poll loop.</p>
+<h3 id="package-layout">Package Layout<a class="headerlink" href="#package-layout" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>internal/agent/
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>  config/
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    config.go       — load paisa-agent.yaml, validate rules
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>  parser/
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    parser.go       — classify message → AccountRule, dispatch to bank parser
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    banks.go        — regex extractor per bank format
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    merchant.go     — keyword routing: merchant string → account + description
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>  llm/
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    ollama.go       — Ollama HTTP client, fill missing Entry fields
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>  telegram/
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    bot.go          — long-poll getUpdates, dispatch message + callback_query events
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    format.go       — render Entry as Telegram message + inline keyboard
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>  approval/
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>    state.go        — in-memory map: messageID → {Entry, status}, FSM
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>  ledger/
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>    entry.go        — Entry struct + format as ledger block
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>    appender.go     — append to auto-import.ledger, create + include if absent
+</span></code></pre></div>
+<h3 id="entry-struct">Entry Struct<a class="headerlink" href="#entry-struct" title="Permanent link">&para;</a></h3>
+<p>The common currency between all components:</p>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kd">type</span><span class="w"> </span><span class="nx">Entry</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="nx">Date</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="c1">// &quot;2026/06/03&quot;</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nx">Desc</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="c1">// &quot;Food Swiggy&quot;</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nx">Src</span><span class="w">  </span><span class="kt">string</span><span class="w"> </span><span class="c1">// &quot;Assets:Checking:FC2148&quot;  — first posting account</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="nx">Amt</span><span class="w">  </span><span class="kt">string</span><span class="w"> </span><span class="c1">// &quot;-215.00 INR&quot;             — amount on first posting</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="nx">Dest</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="c1">// &quot;Expenses:Food:Hyd&quot;       — second posting (auto-balanced)</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>Ledger output:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>{Date} {Desc}
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    {Src}    {Amt}
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    {Dest}
+</span></code></pre></div></p>
 <blockquote>
-<p>Note: The Gmail MCP integration available in Claude Code sessions is Claude-specific and cannot be used inside a standalone Go binary. The Gmail REST API is the correct approach here — it provides the same read access via <code>users.messages.list</code> + <code>users.messages.get</code>.</p>
+<p>Note: <code>Entry.Src</code> maps to YAML <code>destinations</code> (the account with the explicit amount on line 1). <code>Entry.Dest</code> maps to YAML <code>src</code> (the auto-balanced account on line 2). The naming in YAML describes money flow direction; the naming in Entry describes ledger line order.</p>
 </blockquote>
-<p><strong>Email classification:</strong></p>
+<h2 id="config-paisa-agentyaml">Config (paisa-agent.yaml)<a class="headerlink" href="#config-paisa-agentyaml" title="Permanent link">&para;</a></h2>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">paisa</span><span class="p">:</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:7500</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">journal_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/journal</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nt">ollama</span><span class="p">:</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:11434</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gemma3:4b</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="nt">telegram</span><span class="p">:</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">  </span><span class="nt">bot_token</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;...&quot;</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">  </span><span class="nt">chat_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">123456789</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="nt">parser_rules</span><span class="p">:</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">  </span><span class="nt">accounts</span><span class="p">:</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">    </span><span class="c1"># Fixed routes first (all identifiers must match — AND logic)</span>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">bank</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fixed</span>
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="w">      </span><span class="nt">identifiers</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;CRD-PMNT&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;8860&quot;</span><span class="p p-Indicator">]</span>
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="w">      </span><span class="nt">src</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Assets:Checking:AXIS6386&quot;</span>
+</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="w">      </span><span class="nt">destinations</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Liabilities:CreditCard:FK8860&quot;</span>
+</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a><span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;CC</span><span class="nv"> </span><span class="s">Payment&quot;</span>
+</span><span id="__span-4-21"><a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>
+</span><span id="__span-4-22"><a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="w">    </span><span class="c1"># Format routes after fixed</span>
+</span><span id="__span-4-23"><a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">bank</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hdfc_debit</span>
+</span><span id="__span-4-24"><a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="w">      </span><span class="nt">identifiers</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;HDFC</span><span class="nv"> </span><span class="s">Bank</span><span class="nv"> </span><span class="s">Card</span><span class="nv"> </span><span class="s">2148&quot;</span><span class="p p-Indicator">]</span>
+</span><span id="__span-4-25"><a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a><span class="w">      </span><span class="nt">destinations</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Assets:Checking:FC2148&quot;</span>
+</span><span id="__span-4-26"><a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>
+</span><span id="__span-4-27"><a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a><span class="w">  </span><span class="nt">merchants</span><span class="p">:</span>
+</span><span id="__span-4-28"><a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">keyword</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;swiggy&quot;</span>
+</span><span id="__span-4-29"><a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a><span class="w">      </span><span class="nt">account</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Expenses:Food:Hyd&quot;</span>
+</span><span id="__span-4-30"><a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a><span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Food</span><span class="nv"> </span><span class="s">Swiggy&quot;</span>
+</span></code></pre></div>
+<p><strong>Field semantics:</strong>
+- <code>destinations</code> — first ledger posting account (explicit amount)
+- <code>src</code> — second ledger posting account (auto-balanced); fixed routes only
+- <code>description</code> — journal description line; fixed routes only
+- <code>identifiers</code> — ALL substrings must appear in the SMS (AND match)
+- Fixed routes must appear before format routes in the <code>accounts</code> list</p>
+<h2 id="parser-strategy">Parser Strategy<a class="headerlink" href="#parser-strategy" title="Permanent link">&para;</a></h2>
+<h3 id="classification">Classification<a class="headerlink" href="#classification" title="Permanent link">&para;</a></h3>
+<p>Scan <code>accounts</code> list top-to-bottom. First rule where ALL identifiers are present in the SMS wins. Fixed routes listed first ensure they win over format routes on overlapping messages.</p>
+<h3 id="fixed-route-extraction">Fixed Route Extraction<a class="headerlink" href="#fixed-route-extraction" title="Permanent link">&para;</a></h3>
+<p>No bank-specific regex. Run a generic amount+date extractor against the SMS:
+- Amount: patterns <code>INR X</code>, <code>Rs X</code>, <code>INR.X</code>, <code>Rs.X</code> — strip Indian commas
+- Date: all 5 normalisation patterns (see below)
+- Direction: detect "debited"/"debit"/"spent" → negative on <code>destinations</code>; "credited"/"credit"/"received" → positive</p>
+<p>All other fields (Desc, Src, Dest) come directly from the YAML rule.</p>
+<h3 id="format-route-extraction">Format Route Extraction<a class="headerlink" href="#format-route-extraction" title="Permanent link">&para;</a></h3>
+<p>One regex extractor function per <code>bank</code> key:</p>
 <table>
 <thead>
 <tr>
-<th>Type</th>
-<th>Detection</th>
-<th>Action</th>
+<th>Bank key</th>
+<th>SMS pattern</th>
+<th>Date format</th>
+<th>Merchant location</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Transaction alert</td>
-<td>Subject contains: "debited", "credited", "transaction alert", "payment", "spent" — no PDF attachment</td>
-<td>Parse email body → single Transaction</td>
+<td><code>icici_cc</code></td>
+<td><code>INR {amt} spent ... on {date} on {merchant}</code></td>
+<td>DD-Mon-YY</td>
+<td>after last "on "</td>
 </tr>
 <tr>
-<td>Statement</td>
-<td>Has PDF attachment AND subject contains: "statement", "e-statement", "account summary"</td>
-<td>Download PDF → parse all rows → bulk dedup + reconcile</td>
+<td><code>hdfc_debit</code></td>
+<td><code>Spent! INR INR {amt} On ... At {merchant} On {date}</code></td>
+<td>DD Mon,YYYY</td>
+<td>between "At" and "On {date}"</td>
+</tr>
+<tr>
+<td><code>hdfc_cc</code></td>
+<td><code>Spent Rs.{amt} On ... At {merchant} On {date}:{time}</code></td>
+<td>YYYY-MM-DD</td>
+<td>between "At" and "On {date}"</td>
+</tr>
+<tr>
+<td><code>axis_checking</code></td>
+<td><code>INR {amt} debited/credited\n...\n{date}, {time}\nUPI/.../{merchant}</code></td>
+<td>DD-MM-YY</td>
+<td>last human segment of UPI line</td>
+</tr>
+<tr>
+<td><code>axis_cc</code></td>
+<td><code>Spent INR {amt}\n...\n{date} {time} IST\n{merchant}\n</code></td>
+<td>DD-MM-YY</td>
+<td>line 4</td>
+</tr>
+<tr>
+<td><code>idfc_checking</code></td>
+<td><code>Spent Rs.{amt} from ... at {merchant} on {date}</code> or <code>INR.{amt} earned ... on {date}</code></td>
+<td>DD/MM/YY</td>
+<td>after "at "</td>
 </tr>
 </tbody>
 </table>
-<p>The agent tracks the Gmail message ID in <code>imported_refs</code> to avoid reprocessing.</p>
-<h3 id="telegram-sms-relay">Telegram (SMS relay)<a class="headerlink" href="#telegram-sms-relay" title="Permanent link">&para;</a></h3>
-<p><strong>iPhone Shortcut setup</strong> (one-time, manual):
-- Create a Shortcuts automation: "When I receive a message from [list of bank sender IDs]"
-- Action: Get contents of message → URL session POST to <code>https://api.telegram.org/bot&lt;TOKEN&gt;/sendMessage</code> with <code>chat_id</code> and <code>text</code> = raw SMS body</p>
-<p>The agent long-polls <code>getUpdates</code> (offset-tracking). No public URL or Tailscale needed for this direction. Telegram is also used for outbound approval cards (see Approval Gate below).</p>
-<hr />
-<h2 id="parsing">Parsing<a class="headerlink" href="#parsing" title="Permanent link">&para;</a></h2>
-<p>All raw text (SMS, email body, PDF text) goes through a single Ollama call.</p>
-<p><strong>Model</strong>: Local Gamma/Gemma model via Ollama HTTP API at <code>localhost:11434/v1/chat/completions</code></p>
-<p><strong>Output schema</strong> (enforced via Ollama JSON mode):</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">&quot;date&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2025-05-14&quot;</span><span class="p">,</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">&quot;amount&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">-2450.00</span><span class="p">,</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">&quot;currency&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;INR&quot;</span><span class="p">,</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">&quot;merchant&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Swiggy&quot;</span><span class="p">,</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="nt">&quot;account_last4&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1234&quot;</span><span class="p">,</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="nt">&quot;bank&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;HDFC&quot;</span><span class="p">,</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="nt">&quot;ref_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;47291830&quot;</span><span class="p">,</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">  </span><span class="nt">&quot;tx_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;debit|credit|transfer|emi|charge&quot;</span><span class="p">,</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span><span class="nt">&quot;suggested_ledger_account&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Expenses:Food:Dining&quot;</span><span class="p">,</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">  </span><span class="nt">&quot;confidence&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.95</span>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="p">}</span>
-</span></code></pre></div>
-<ul>
-<li><code>amount</code> is negative for debits (money leaving), positive for credits</li>
-<li><code>suggested_ledger_account</code> is drawn from the user's existing account list (passed as context in the prompt)</li>
-<li><code>confidence</code> &lt; 0.7 routes to Telegram approval regardless of merchant rule</li>
-</ul>
-<hr />
-<h2 id="deduplication">Deduplication<a class="headerlink" href="#deduplication" title="Permanent link">&para;</a></h2>
-<p>Stored in <code>agent.db</code> table <code>imported_refs</code>:</p>
-<div class="language-sql highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">imported_refs</span><span class="w"> </span><span class="p">(</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="n">id</span><span class="w">          </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="n">ref_id</span><span class="w">      </span><span class="nb">TEXT</span><span class="p">,</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nb">date</span><span class="w">        </span><span class="nb">TEXT</span><span class="p">,</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="n">amount</span><span class="w">      </span><span class="nb">REAL</span><span class="p">,</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="n">account</span><span class="w">     </span><span class="nb">TEXT</span><span class="p">,</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="k">source</span><span class="w">      </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">   </span><span class="c1">-- &#39;sms&#39; | &#39;gmail_alert&#39; | &#39;gmail_statement&#39;</span>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="n">imported_at</span><span class="w"> </span><span class="nb">TEXT</span>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="p">);</span>
-</span></code></pre></div>
-<p><strong>Match priority:</strong></p>
-<ol>
-<li><strong>Exact ref_id match</strong> → duplicate, skip (strongest signal; ref IDs are bank-assigned)</li>
-<li><strong>Same (account + amount + date ±1 day)</strong> → probable duplicate, flag for Telegram review</li>
-<li><strong>No match</strong> → new transaction, proceed to merchant gate</li>
-</ol>
-<hr />
-<h2 id="merchant-rule-engine-smart-gate">Merchant Rule Engine (Smart Gate)<a class="headerlink" href="#merchant-rule-engine-smart-gate" title="Permanent link">&para;</a></h2>
-<p>Stored in <code>agent.db</code> table <code>merchant_rules</code>:</p>
-<div class="language-sql highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">merchant_rules</span><span class="w"> </span><span class="p">(</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="n">merchant</span><span class="w">    </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="n">account</span><span class="w">     </span><span class="nb">TEXT</span><span class="p">,</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="n">approve_count</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">    </span><span class="n">auto_approve</span><span class="w">  </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="w">   </span><span class="c1">-- 1 = auto-post silently</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">);</span>
-</span></code></pre></div>
-<p><strong>Bootstrap on first run</strong>: Agent scans the main journal and <code>auto-imported.journal</code>, extracts all <code>payee → account</code> pairings, inserts them with <code>approve_count = 3, auto_approve = 1</code>. Day-one auto-post rate is high for all existing merchants.</p>
-<p><strong>Gate logic:</strong></p>
+<p><strong>Amount edge cases:</strong>
+- <code>INR INR 215</code> (HDFC double-INR) — regex skips first INR
+- Indian comma format <code>10,468.87</code> — strip commas before parsing
+- No decimal <code>11864</code> — normalise to <code>11864.00</code></p>
+<h3 id="date-normalisation">Date Normalisation<a class="headerlink" href="#date-normalisation" title="Permanent link">&para;</a></h3>
+<p>All formats → <code>YYYY/MM/DD</code>:</p>
 <table>
 <thead>
 <tr>
-<th>Condition</th>
-<th>Action</th>
+<th>Input</th>
+<th>Example</th>
+<th>Output</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>auto_approve = 1</code> AND <code>amount &lt; auto_approve_threshold</code> (default ₹10,000)</td>
-<td>Auto-post silently</td>
+<td>DD-Mon-YY</td>
+<td>03-Jun-26</td>
+<td>2026/06/03</td>
 </tr>
 <tr>
-<td><code>confidence &lt; 0.7</code></td>
-<td>Telegram approval (regardless of merchant rule)</td>
+<td>DD Mon,YYYY</td>
+<td>03 Jun,2026</td>
+<td>2026/06/03</td>
 </tr>
 <tr>
-<td>Merchant not in rules</td>
-<td>Telegram approval</td>
+<td>YYYY-MM-DD</td>
+<td>2026-05-21</td>
+<td>2026/05/21</td>
 </tr>
 <tr>
-<td><code>amount &gt;= auto_approve_threshold</code></td>
-<td>Telegram approval (regardless of merchant rule)</td>
+<td>DD-MM-YY</td>
+<td>03-06-26</td>
+<td>2026/06/03</td>
+</tr>
+<tr>
+<td>DD/MM/YY</td>
+<td>09/04/26</td>
+<td>2026/04/09</td>
 </tr>
 </tbody>
 </table>
-<p><strong>On Telegram approval (✓):</strong>
-- Post transaction to journal
-- Increment <code>approve_count</code>
-- If <code>approve_count &gt;= 3</code>, set <code>auto_approve = 1</code></p>
-<p><strong>On Telegram edit (✎):</strong>
-- Bot asks: "Which account?" with inline keyboard of common accounts
-- User selects → post with corrected account → update <code>merchant_rules</code></p>
-<p><strong>On Telegram skip (✗):</strong>
-- Record ref_id in <code>imported_refs</code> with <code>source = 'skipped'</code> so it's not re-shown</p>
-<hr />
-<h2 id="journal-writing">Journal Writing<a class="headerlink" href="#journal-writing" title="Permanent link">&para;</a></h2>
-<p>The agent appends hledger-format entries to <code>auto-imported.journal</code> in the Paisa journal directory.</p>
-<p><strong>One-time manual setup</strong>: Add <code>include auto-imported.journal</code> to the user's main <code>.journal</code> file.</p>
-<p><strong>Entry format:</strong></p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>; source: sms | gmail_alert | gmail_statement
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>; ref: 47291830
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>2025/05/14 Swiggy
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    Expenses:Food:Dining        ₹2,450
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    Assets:HDFC:Savings
+<p>Month abbreviations are case-insensitive (Jun / JUN / jun).</p>
+<h3 id="merchant-routing">Merchant Routing<a class="headerlink" href="#merchant-routing" title="Permanent link">&para;</a></h3>
+<p>After extraction, lowercase the merchant string and scan <code>merchants</code> list top-to-bottom. First rule where <code>keyword</code> is a substring of the merchant string wins → sets <code>Entry.Dest</code> and <code>Entry.Desc</code>.</p>
+<h3 id="llm-fallback">LLM Fallback<a class="headerlink" href="#llm-fallback" title="Permanent link">&para;</a></h3>
+<p>Called only when <code>Entry.Dest</code> or <code>Entry.Desc</code> is still empty after merchant routing.</p>
+<p>Prompt includes: raw SMS text + partially filled Entry. Asks Ollama to return only the missing fields as JSON:
+<div class="language-json highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span><span class="nt">&quot;desc&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;dest&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">}</span>
+</span></code></pre></div></p>
+<p>Date, amount, and src are never sent to LLM (always regex-extracted). If LLM also fails or times out, the Entry is sent to Telegram with the missing fields blank for manual fill via Edit.</p>
+<h2 id="telegram-approval-flow">Telegram Approval Flow<a class="headerlink" href="#telegram-approval-flow" title="Permanent link">&para;</a></h2>
+<h3 id="draft-format">Draft Format<a class="headerlink" href="#draft-format" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>📨 New Transaction
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>desc: Food Swiggy
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>date: 2026/06/03
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>src:  Assets:Checking:FC2148
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>amt:  -215.00 INR
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>dest: Expenses:Food:Hyd
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>[✅ Approve]  [✏️ Edit]  [⏭ Skip]
 </span></code></pre></div>
-<p>After each write, the agent calls <code>POST /api/sync</code> on Paisa's local HTTP server so the new transaction appears immediately in the UI.</p>
-<hr />
-<h2 id="month-end-statement-reconciliation">Month-end Statement Reconciliation<a class="headerlink" href="#month-end-statement-reconciliation" title="Permanent link">&para;</a></h2>
-<p>When a statement email is detected:</p>
-<ol>
-<li>Download PDF attachment</li>
-<li>Extract text via <code>pdftotext</code> (or pure-Go PDF parser)</li>
-<li>Parse all rows through Ollama → list of Transactions</li>
-<li>Run dedup against <code>imported_refs</code>:</li>
-<li><strong>Gaps</strong>: in statement but not imported → post them (with Telegram notification per gap)</li>
-<li><strong>Anomalies</strong>: in <code>imported_refs</code> but not in statement → flag in reconciliation summary</li>
-<li>Send Telegram message: <code>"May statement reconciled: 2 gaps filled · 0 anomalies · ₹1,23,450 total"</code></li>
-</ol>
-<hr />
-<h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
-<p><code>paisa-agent.yaml</code> (in <code>~/.config/paisa-agent/</code> or same dir as <code>paisa.yaml</code>):</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">paisa</span><span class="p">:</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:7500</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="nt">journal_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">~/Documents/paisa</span><span class="w">     </span><span class="c1"># path to journal directory</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span><span class="nt">api_token</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&quot;</span><span class="w">                       </span><span class="c1"># if Paisa token auth is enabled</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="nt">ollama</span><span class="p">:</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:11434</span>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gemma3:12b</span>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="nt">telegram</span><span class="p">:</span>
-</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">  </span><span class="nt">bot_token</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;123456:ABC...&quot;</span>
-</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">  </span><span class="nt">chat_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">987654321</span>
-</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>
-</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="nt">gmail</span><span class="p">:</span>
-</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="w">  </span><span class="nt">credentials_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">~/.config/paisa-agent/gmail-token.json</span><span class="w">   </span><span class="c1"># OAuth2 token from one-time setup</span>
-</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="w">  </span><span class="nt">poll_interval_seconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span>
-</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="w">  </span><span class="nt">labels</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;bank&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;finance&quot;</span><span class="p p-Indicator">]</span><span class="w">         </span><span class="c1"># Gmail labels to scan; empty = all inbox</span>
-</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>
-</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="nt">merchant_rules</span><span class="p">:</span>
-</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a><span class="w">  </span><span class="nt">auto_approve_threshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10000</span><span class="w">       </span><span class="c1"># INR; transactions above always need approval</span>
-</span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="w">  </span><span class="nt">promote_after_approvals</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span><span class="w">          </span><span class="c1"># approvals before auto_approve = 1</span>
+<h3 id="state-machine">State Machine<a class="headerlink" href="#state-machine" title="Permanent link">&para;</a></h3>
+<p>States per <code>(chatID, messageID)</code>:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>pending  →  ✅ Approve  →  ledger.Append(entry) → bot edits: &quot;✅ Posted&quot; → done
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>pending  →  ✏️ Edit     →  editing
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>pending  →  ⏭ Skip     →  bot edits: &quot;⏭ Skipped&quot; → done
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>editing  →  text reply  →  parse corrections → rebuild Entry → new draft sent → pending
 </span></code></pre></div>
-<hr />
-<h2 id="binary-and-service">Binary and Service<a class="headerlink" href="#binary-and-service" title="Permanent link">&para;</a></h2>
+<p>State is in-memory only. If paisa-agent restarts, pending buttons become unresponsive (acceptable — no DB dependency).</p>
+<h3 id="edit-reply-format">Edit Reply Format<a class="headerlink" href="#edit-reply-format" title="Permanent link">&para;</a></h3>
+<p>Bot sends the current 5-field block as a template. User replies with only the lines they want to change:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>desc: Groceries Zepto
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>dest: Expenses:Groceries:Hyd
+</span></code></pre></div>
+Parser does key:value scan, merges changed fields onto the existing Entry, re-sends draft with buttons.</p>
+<h2 id="file-append">File Append<a class="headerlink" href="#file-append" title="Permanent link">&para;</a></h2>
+<p><strong>Target:</strong> <code>{journal_dir}/auto-import.ledger</code></p>
+<p><strong>First run:</strong> create file if absent. Check main journal for <code>include auto-import.ledger</code>; append include line if missing.</p>
+<p><strong>Per approval:</strong> append blank-line-separated ledger block:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>2026/06/03 Food Swiggy
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    Assets:Checking:FC2148             -215.00 INR
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    Expenses:Food:Hyd
+</span></code></pre></div></p>
+<p><strong>Amount formatting:</strong>
+- Always 2 decimal places
+- No Indian comma separators in output
+- Negative prefix for debits, no prefix for credits/payments</p>
+<p><strong>Duplicate check:</strong> before appending, scan last 500 lines for same date + amount + src account. If found, send Telegram warning:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>⚠️ Possible duplicate — matching entry exists. Post anyway?
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>[✅ Post anyway]  [⏭ Skip]
+</span></code></pre></div></p>
+<p><strong>Concurrency:</strong> <code>sync.Mutex</code> around file append.</p>
+<h2 id="per-message-walkthrough">Per-Message Walkthrough<a class="headerlink" href="#per-message-walkthrough" title="Permanent link">&para;</a></h2>
+<p>All 16 messages from examples file produce the following Telegram drafts:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>SMS</th>
+<th>Rule</th>
+<th>Telegram Draft (desc / amt / src → dest)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>ICICI CC Amazon</td>
+<td>icici_cc</td>
+<td>Utils: Amazon Pay / -453.00 / ICICI6009 → Utils:Hyd</td>
+</tr>
+<tr>
+<td>2</td>
+<td>ICICI CC payment</td>
+<td>fixed</td>
+<td>CC Payment / 10468.87 / ICIC6009 → AXIS6386</td>
+</tr>
+<tr>
+<td>3</td>
+<td>HDFC Debit Swiggy</td>
+<td>hdfc_debit</td>
+<td>Food Swiggy / -215.00 / FC2148 → Food:Hyd</td>
+</tr>
+<tr>
+<td>4</td>
+<td>HDFC Debit Blink</td>
+<td>hdfc_debit</td>
+<td>Groceries Blink / -426.00 / FC2148 → Groceries:Hyd</td>
+</tr>
+<tr>
+<td>5</td>
+<td>HDFC Debit Zomato</td>
+<td>hdfc_debit</td>
+<td>Food Zomato / -327.25 / FC2148 → Food:Hyd</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Axis IRCTC</td>
+<td>axis_checking</td>
+<td>Travel / -1804.05 / AXIS6386 → Travel:Hyd</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Axis KONDAVEET</td>
+<td>fixed</td>
+<td>Rent from Haritha / 30000.00 / AXIS6386 → AXISHARITHA</td>
+</tr>
+<tr>
+<td>8</td>
+<td>IDFC interest</td>
+<td>idfc_checking</td>
+<td>Bank Interest / 318.00 / IDFC6977 → Income:Interest:IDFC6977</td>
+</tr>
+<tr>
+<td>9</td>
+<td>IDFC ZEPTO</td>
+<td>idfc_checking</td>
+<td>Groceries ZEPTO / -473.00 / IDFC6977 → Groceries:Hyd</td>
+</tr>
+<tr>
+<td>10</td>
+<td>HDFC CC ZEPTO</td>
+<td>hdfc_cc</td>
+<td>Groceries ZEPTO / -341.00 / HDFC2527 → Groceries:Hyd</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Axis CC DISTRICT</td>
+<td>axis_cc</td>
+<td>Entertainment: DISTRICT / -210.12 / MyZone1610 → Entertainment:Hyd</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Axis CC FLIPKART</td>
+<td>axis_cc</td>
+<td>Utils: Flipkart / -11864.00 / SELECT6792 → Utils:Hyd</td>
+</tr>
+<tr>
+<td>13</td>
+<td>Axis CC Ing*Flipkar</td>
+<td>axis_cc</td>
+<td>Utils: Flipkart / -3468.00 / FK8860 → Utils:Hyd</td>
+</tr>
+<tr>
+<td>14</td>
+<td>CRD-PMNT FK8860</td>
+<td>fixed</td>
+<td>CC Payment / 1417.00 / FK8860 → AXIS6386</td>
+</tr>
+<tr>
+<td>15</td>
+<td>CRD-PMNT MyZone1610</td>
+<td>fixed</td>
+<td>CC Payment / 1417.00 / MyZone1610 → AXIS6386</td>
+</tr>
+<tr>
+<td>16</td>
+<td>CRD-PMNT SELECT6792</td>
+<td>fixed</td>
+<td>CC Payment / 1417.00 / SELECT6792 → AXIS6386</td>
+</tr>
+</tbody>
+</table>
+<h2 id="yaml-fixes-required-before-implementation">YAML Fixes Required Before Implementation<a class="headerlink" href="#yaml-fixes-required-before-implementation" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Issue</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>Income:Interest</code> too generic</td>
+<td>Add per-bank interest merchant rules (e.g. <code>Income:Interest:IDFC6977</code>)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Amazon description order</td>
+<td>Update YAML merchant rule <code>description</code> to preferred wording</td>
+</tr>
+</tbody>
+</table>
+<h2 id="out-of-scope">Out of Scope<a class="headerlink" href="#out-of-scope" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Built with <code>go build ./cmd/paisa-agent</code></li>
-<li>Installed as a macOS launchd service: <code>~/Library/LaunchAgents/com.paisa.agent.plist</code></li>
-<li>Logs to <code>~/.local/share/paisa-agent/agent.log</code></li>
-<li><code>agent.db</code> at <code>~/.local/share/paisa-agent/agent.db</code></li>
-</ul>
-<hr />
-<h2 id="paisa-changes">Paisa Changes<a class="headerlink" href="#paisa-changes" title="Permanent link">&para;</a></h2>
-<p><strong>None.</strong> <code>POST /api/sync</code> already exists. The agent is a fully independent binary.</p>
-<hr />
-<h2 id="out-of-scope-this-spec">Out of Scope (this spec)<a class="headerlink" href="#out-of-scope-this-spec" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Payment execution (bill pay, UPI) — Action Engine is a separate sub-project</li>
-<li>Proactive intelligence / anomaly alerts — Intelligence Engine is a separate sub-project</li>
-<li>Web UI for reviewing pending transactions — Telegram is the mobile approval interface; Paisa's existing editor handles any manual corrections</li>
-<li>Android SMS ingestion — iPhone Shortcuts only for now</li>
+<li>Auto-sync triggering paisa after append (can call <code>POST /api/sync</code> later as enhancement)</li>
+<li>Telegram webhook mode (long-poll is sufficient for single-user)</li>
+<li>Persistent approval state across restarts</li>
+<li>Gmail / other SMS ingestion channels</li>
+<li>Auto-approval threshold (can add merchant_rules config later)</li>
 </ul>
 
 
@@ -2092,7 +2341,7 @@
               
                 
               
-              Thanks for your feedback! Help us improve this page by using our <a href="https://docs.google.com/forms/d/e/1FAIpQLSejpTiljuhsviEvXFBN-Z5rJZ_dkXHV5RaZzqpyCAZF1nIFiQ/viewform?usp=pp_url&entry.1125403938=/superpowers/specs/2026-05-30-ingestion-agent-design/" target="_blank" rel="noopener">feedback form</a>.
+              Thanks for your feedback! Help us improve this page by using our <a href="https://docs.google.com/forms/d/e/1FAIpQLSejpTiljuhsviEvXFBN-Z5rJZ_dkXHV5RaZzqpyCAZF1nIFiQ/viewform?usp=pp_url&entry.1125403938=/superpowers/specs/2026-06-07-auto-ingest-transactions-design/" target="_blank" rel="noopener">feedback form</a>.
             </div>
           
         </div>
