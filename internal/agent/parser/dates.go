@@ -18,6 +18,8 @@ var dateExtractPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec),\d{4})\b`),
 	// YYYY-MM-DD  (must come before DD-MM-YY to avoid 4-digit year ambiguity)
 	regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2})\b`),
+	// DD/MM/YYYY  (must come before DD/MM/YY to avoid partial match on 4-digit year)
+	regexp.MustCompile(`\b(\d{2}/\d{2}/\d{4})\b`),
 	// DD-MM-YY
 	regexp.MustCompile(`\b(\d{2}-\d{2}-\d{2})\b`),
 	// DD/MM/YY
@@ -32,7 +34,7 @@ func ExtractDateFromSMS(sms string) (string, error) {
 			return m[1], nil
 		}
 	}
-	log.Debugf("date: no pattern matched (supported: DD-Mon-YY, DD Mon,YYYY, YYYY-MM-DD, DD-MM-YY, DD/MM/YY)")
+	log.Debugf("date: no pattern matched (supported: DD-Mon-YY, DD Mon,YYYY, YYYY-MM-DD, DD/MM/YYYY, DD-MM-YY, DD/MM/YY)")
 	return "", fmt.Errorf("no date found in SMS")
 }
 
@@ -60,6 +62,11 @@ func NormaliseDate(raw string) (string, error) {
 
 	// DD-MM-YY  (e.g. 03-06-26)
 	if t, err := time.Parse("02-01-06", raw); err == nil {
+		return t.Format("2006/01/02"), nil
+	}
+
+	// DD/MM/YYYY  (e.g. 08/06/2026)
+	if t, err := time.Parse("02/01/2006", raw); err == nil {
 		return t.Format("2006/01/02"), nil
 	}
 

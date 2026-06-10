@@ -19,6 +19,7 @@ func TestNormaliseDate(t *testing.T) {
 		{"31 May,2026", "2026/05/31"}, // DD Mon,YYYY
 		{"2026-05-21", "2026/05/21"},  // YYYY-MM-DD
 		{"03-06-26", "2026/06/03"},    // DD-MM-YY
+		{"08/06/2026", "2026/06/08"},  // DD/MM/YYYY
 		{"09/04/26", "2026/04/09"},    // DD/MM/YY
 		{"31/05/26", "2026/05/31"},    // DD/MM/YY
 	}
@@ -45,6 +46,7 @@ func TestExtractDateFromSMS(t *testing.T) {
 		{"Spent Rs.341 On HDFC Bank Card 2527 At ZEPTO On 2026-05-21:07:32:56.", "2026-05-21"},
 		{"INR 1804.05 debited\nA/c no. XX6386\n03-06-26, 10:21:54\nUPI/P2M/...", "03-06-26"},
 		{"Spent Rs.473.00 from A/C XX6977 at ZEPTO on 09/04/26.", "09/04/26"},
+		{"An amount of INR 577.00 has been DEBITED to your account XXXXX21343 on 08/06/2026.", "08/06/2026"},
 	}
 	for _, c := range cases {
 		got, err := parser.ExtractDateFromSMS(c.sms)
