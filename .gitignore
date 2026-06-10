@@ -27,3 +27,8 @@ fonts/*
 /result
 brand/*.png
 .worktrees/
+.superpowers/
+appreview.md
+/paisa-agent
+docs/superpowers/plans/
+docs/superpowers/specs/
