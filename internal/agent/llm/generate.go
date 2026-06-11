@@ -21,7 +21,11 @@ func Generate(prompt string, cfg config.OllamaConfig) (string, error) {
 		return "", fmt.Errorf("ollama request: %w", err)
 	}
 	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Warnf("llm: could not read Ollama response body: %v", err)
+		return "", fmt.Errorf("ollama response read: %w", err)
+	}
 
 	var gr generateResponse
 	if err := json.Unmarshal(data, &gr); err != nil {
