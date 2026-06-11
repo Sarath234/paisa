@@ -2,10 +2,8 @@
 package llm
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -54,27 +52,15 @@ func FillMissing(sms string, entry *ledger.Entry, cfg config.OllamaConfig) error
 		sms, entry.Date, entry.Src, entry.Amt, strings.Join(missing, ", "),
 	)
 
-	body, _ := json.Marshal(generateRequest{Model: cfg.Model, Prompt: prompt, Stream: false})
-	resp, err := httpClient.Post(cfg.URL+"/api/generate", "application/json", bytes.NewReader(body))
+	response, err := Generate(prompt, cfg)
 	if err != nil {
-		log.Warnf("llm: Ollama request failed url=%q: %v", cfg.URL, err)
-		return fmt.Errorf("ollama request: %w", err)
-	}
-	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
-
-	var gr generateResponse
-	if err := json.Unmarshal(data, &gr); err != nil {
-		log.Warnf("llm: could not parse Ollama envelope: %v (raw=%q)", err, truncate(string(data), 200))
-		return fmt.Errorf("ollama response parse: %w", err)
+		return err
 	}
 
-	log.Debugf("llm: raw response: %q", truncate(gr.Response, 300))
-
-	jsonStr := extractJSON(gr.Response)
+	jsonStr := extractJSON(response)
 	var result fillResult
 	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
-		log.Warnf("llm: could not extract JSON from response %q: %v", truncate(gr.Response, 200), err)
+		log.Warnf("llm: could not extract JSON from response %q: %v", truncate(response, 200), err)
 		return fmt.Errorf("ollama result parse: %w", err)
 	}
 
