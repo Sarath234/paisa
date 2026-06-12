@@ -2,8 +2,8 @@
 package approval
 
 import (
-	"sync"
 	"github.com/ananthakumaran/paisa/internal/agent/ledger"
+	"sync"
 )
 
 type Status string

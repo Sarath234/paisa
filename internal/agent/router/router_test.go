@@ -15,11 +15,14 @@ type fakeCap struct {
 	replies []string
 }
 
-func (f *fakeCap) Name() string                  { return f.name }
-func (f *fakeCap) Match(text string) bool        { return f.match }
-func (f *fakeCap) HasPending(chatID int64) bool  { return f.pending }
-func (f *fakeCap) Handle(text string) error      { f.handled = append(f.handled, text); return nil }
-func (f *fakeCap) HandleReply(chatID int64, text string) error { f.replies = append(f.replies, text); return nil }
+func (f *fakeCap) Name() string                 { return f.name }
+func (f *fakeCap) Match(text string) bool       { return f.match }
+func (f *fakeCap) HasPending(chatID int64) bool { return f.pending }
+func (f *fakeCap) Handle(text string) error     { f.handled = append(f.handled, text); return nil }
+func (f *fakeCap) HandleReply(chatID int64, text string) error {
+	f.replies = append(f.replies, text)
+	return nil
+}
 
 func TestRoutePendingWinsOverMatch(t *testing.T) {
 	sms := &fakeCap{name: "sms_ingest", match: true, pending: true}

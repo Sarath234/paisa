@@ -8,7 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Sender is the slice of telegram.Bot the QA capability needs.
+// Sender is the subset of telegram.Bot's interface the QA capability needs.
 type Sender interface {
 	SendText(text string) error
 }
@@ -54,6 +54,7 @@ func (c *Capability) Handle(text string) error {
 	answer, err := c.Answerer.Answer(q)
 	if err != nil {
 		log.Errorf("qa: answer failed: %v", err)
+		// Including err.Error() is fine for a single-user bot; sanitize if ever multi-tenant.
 		return c.Bot.SendText("⚠️ Paisa server unreachable — is paisa running?\n(" + err.Error() + ")")
 	}
 	return c.Bot.SendText(answer)

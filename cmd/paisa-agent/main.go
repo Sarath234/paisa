@@ -18,6 +18,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Intent names must match the Name() return of each Capability registered
+// with the router: sms.Capability → "sms_ingest", qa.Capability → "finance_qa".
 var intents = []llm.Intent{
 	{Name: "sms_ingest", Description: "a bank transaction SMS or alert (debit, credit, UPI, account balance notification)"},
 	{Name: "finance_qa", Description: "a question about the user's own finances (spending, net worth, balances, budget)"},
@@ -56,7 +58,9 @@ func main() {
 		},
 		func(text string) {
 			log.Infof("router: no capability claimed message — sending help")
-			bot.SendText(qa.HelpText)
+			if err := bot.SendText(qa.HelpText); err != nil {
+				log.Warnf("router: fallback send failed: %v", err)
+			}
 		},
 	)
 

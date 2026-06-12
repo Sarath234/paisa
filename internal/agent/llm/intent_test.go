@@ -2,6 +2,7 @@
 package llm
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,10 +10,11 @@ import (
 	"github.com/ananthakumaran/paisa/internal/agent/config"
 )
 
-func intentServer(t *testing.T, response string) *httptest.Server {
+func intentServer(t *testing.T, responseText string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"response": "` + response + `"}`))
+		body, _ := json.Marshal(map[string]string{"response": responseText})
+		w.Write(body)
 	}))
 }
 
@@ -22,7 +24,7 @@ var testIntents = []Intent{
 }
 
 func TestClassifyIntent(t *testing.T) {
-	srv := intentServer(t, `{\"intent\": \"finance_qa\"}`)
+	srv := intentServer(t, `{"intent": "finance_qa"}`)
 	defer srv.Close()
 	got, err := ClassifyIntent("how much did I spend?", testIntents, config.OllamaConfig{URL: srv.URL})
 	if err != nil {
@@ -34,7 +36,7 @@ func TestClassifyIntent(t *testing.T) {
 }
 
 func TestClassifyIntentUnknownLabel(t *testing.T) {
-	srv := intentServer(t, `{\"intent\": \"weather_report\"}`)
+	srv := intentServer(t, `{"intent": "weather_report"}`)
 	defer srv.Close()
 	got, err := ClassifyIntent("hello", testIntents, config.OllamaConfig{URL: srv.URL})
 	if err != nil {

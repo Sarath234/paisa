@@ -20,8 +20,8 @@ func TestMatchAccounts(t *testing.T) {
 		{"FOOD", []string{"Expenses:Food"}},                                    // case-insensitive
 		{"checking", []string{"Assets:Checking:Axis", "Assets:Checking:HDFC"}}, // substring, multiple
 		{"axis", []string{"Assets:Checking:Axis"}},                             // exact leaf
-		{"travel", nil},                                                        // no match
-		{"", nil},                                                              // empty query
+		{"travel", nil}, // no match
+		{"", nil},       // empty query
 	}
 	for _, c := range cases {
 		got := MatchAccounts(c.query, accounts)

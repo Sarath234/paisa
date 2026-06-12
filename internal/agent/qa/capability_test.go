@@ -27,6 +27,9 @@ func TestCapabilityMatch(t *testing.T) {
 	if c.Match("how much did I spend?") {
 		t.Error("natural language must NOT match deterministically (LLM stage decides)")
 	}
+	if c.Match("/q") {
+		t.Error("bare /q without a question must NOT match (falls through to LLM stage)")
+	}
 }
 
 func TestCapabilityName(t *testing.T) {
@@ -48,7 +51,7 @@ func TestCapabilityNoPending(t *testing.T) {
 func TestCapabilityHandleSuccess(t *testing.T) {
 	paisa := paisaStub(t)
 	defer paisa.Close()
-	ollama := ollamaStub(t, `{\"intent\": \"networth\"}`)
+	ollama := ollamaStub(t, `{"intent": "networth"}`)
 	defer ollama.Close()
 
 	bot := &fakeSender{}
@@ -82,7 +85,7 @@ func TestCapabilityHandleExtractFailure(t *testing.T) {
 }
 
 func TestCapabilityHandlePaisaDown(t *testing.T) {
-	ollama := ollamaStub(t, `{\"intent\": \"networth\"}`)
+	ollama := ollamaStub(t, `{"intent": "networth"}`)
 	defer ollama.Close()
 	bot := &fakeSender{}
 	c := &Capability{
@@ -101,7 +104,7 @@ func TestCapabilityHandlePaisaDown(t *testing.T) {
 func TestCapabilityHandleStripsPrefix(t *testing.T) {
 	paisa := paisaStub(t)
 	defer paisa.Close()
-	ollama := ollamaStub(t, `{\"intent\": \"networth\"}`)
+	ollama := ollamaStub(t, `{"intent": "networth"}`)
 	defer ollama.Close()
 	bot := &fakeSender{}
 	c := &Capability{

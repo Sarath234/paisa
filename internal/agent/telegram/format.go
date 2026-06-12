@@ -3,8 +3,8 @@ package telegram
 
 import (
 	"fmt"
-	"strings"
 	"github.com/ananthakumaran/paisa/internal/agent/ledger"
+	"strings"
 )
 
 // FormatDraft renders an Entry as the Telegram approval draft message.

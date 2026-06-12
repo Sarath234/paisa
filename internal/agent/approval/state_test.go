@@ -2,11 +2,11 @@
 package approval_test
 
 import (
-	"sync"
-	"testing"
 	"github.com/ananthakumaran/paisa/internal/agent/approval"
 	"github.com/ananthakumaran/paisa/internal/agent/ledger"
 	"github.com/stretchr/testify/assert"
+	"sync"
+	"testing"
 )
 
 func TestStore_SetAndGet(t *testing.T) {

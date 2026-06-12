@@ -44,10 +44,10 @@ func ClassifyIntent(text string, intents []Intent, cfg config.OllamaConfig) (str
 	name := strings.ToLower(strings.TrimSpace(result.Intent))
 	for _, in := range intents {
 		if in.Name == name {
-			log.Infof("router: llm classified intent=%q", name)
+			log.Infof("llm: intent classified as %q", name)
 			return name, nil
 		}
 	}
-	log.Infof("router: llm returned unlisted intent=%q — treating as unknown", name)
+	log.Infof("llm: unlisted intent %q — returning unknown", name)
 	return "unknown", nil
 }

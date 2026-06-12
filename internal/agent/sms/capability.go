@@ -102,6 +102,7 @@ func (c *Capability) sendDraft(entry agentledger.Entry) {
 	dup, err := agentledger.IsDuplicate(c.Cfg.Paisa.JournalDir, &entry)
 	if err != nil {
 		log.Warnf("duplicate check: %v", err)
+		// treat as non-duplicate on error — never block the ingest flow
 	}
 
 	var msgID int
