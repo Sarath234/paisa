@@ -40,7 +40,7 @@ func (c *Capability) Match(text string) bool {
 
 func (c *Capability) HasPending(chatID int64) bool { return false }
 
-func (c *Capability) HandleReply(text string) error { return nil }
+func (c *Capability) HandleReply(chatID int64, text string) error { return nil }
 
 func (c *Capability) Handle(text string) error {
 	text = strings.TrimPrefix(strings.TrimSpace(text), "/q ")

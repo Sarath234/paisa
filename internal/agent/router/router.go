@@ -23,7 +23,7 @@ type Capability interface {
 	// conversation awaiting the next message from this chat.
 	HasPending(chatID int64) bool
 	// HandleReply consumes the next message of an open conversation.
-	HandleReply(text string) error
+	HandleReply(chatID int64, text string) error
 }
 
 type Router struct {
@@ -33,7 +33,8 @@ type Router struct {
 }
 
 // New builds a router. classify maps text → capability name (or "unknown");
-// fallback runs when nothing claims the message.
+// fallback runs when nothing claims the message. classify may be nil only if all
+// capabilities are deterministic (no unmatched text will reach the LLM stage).
 func New(caps []Capability, classify func(string) (string, error), fallback func(string)) *Router {
 	return &Router{caps: caps, classify: classify, fallback: fallback}
 }
@@ -44,7 +45,7 @@ func (r *Router) Route(chatID int64, text string) {
 	for _, c := range r.caps {
 		if c.HasPending(chatID) {
 			log.Debugf("router: %s has pending conversation — routing reply", c.Name())
-			if err := c.HandleReply(text); err != nil {
+			if err := c.HandleReply(chatID, text); err != nil {
 				log.Errorf("router: %s reply: %v", c.Name(), err)
 			}
 			return
@@ -59,6 +60,12 @@ func (r *Router) Route(chatID int64, text string) {
 			}
 			return
 		}
+	}
+
+	if r.classify == nil {
+		log.Warnf("router: no classifier wired — falling back")
+		r.fallback(text)
+		return
 	}
 
 	intent, err := r.classify(text)

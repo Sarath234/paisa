@@ -40,7 +40,7 @@ func TestCapabilityNoPending(t *testing.T) {
 	if c.HasPending(42) {
 		t.Error("QA has no multi-turn state in v1")
 	}
-	if err := c.HandleReply("x"); err != nil {
+	if err := c.HandleReply(42, "x"); err != nil {
 		t.Errorf("HandleReply should be a no-op: %v", err)
 	}
 }

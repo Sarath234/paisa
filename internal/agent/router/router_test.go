@@ -19,7 +19,7 @@ func (f *fakeCap) Name() string                  { return f.name }
 func (f *fakeCap) Match(text string) bool        { return f.match }
 func (f *fakeCap) HasPending(chatID int64) bool  { return f.pending }
 func (f *fakeCap) Handle(text string) error      { f.handled = append(f.handled, text); return nil }
-func (f *fakeCap) HandleReply(text string) error { f.replies = append(f.replies, text); return nil }
+func (f *fakeCap) HandleReply(chatID int64, text string) error { f.replies = append(f.replies, text); return nil }
 
 func TestRoutePendingWinsOverMatch(t *testing.T) {
 	sms := &fakeCap{name: "sms_ingest", match: true, pending: true}
@@ -75,5 +75,15 @@ func TestRouteClassifierErrorFallback(t *testing.T) {
 	r.Route(1, "anything")
 	if fellBack != "anything" {
 		t.Error("classifier error must hit fallback")
+	}
+}
+
+func TestRouteNilClassifyFallsBack(t *testing.T) {
+	qa := &fakeCap{name: "finance_qa"}
+	var fellBack string
+	r := New([]Capability{qa}, nil, func(text string) { fellBack = text })
+	r.Route(1, "unmatched text")
+	if fellBack != "unmatched text" || len(qa.handled) != 0 {
+		t.Errorf("nil classify must fall back, not panic: fellBack=%q", fellBack)
 	}
 }
