@@ -3,17 +3,25 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ananthakumaran/paisa/internal/agent/approval"
 	"github.com/ananthakumaran/paisa/internal/agent/config"
 	agentledger "github.com/ananthakumaran/paisa/internal/agent/ledger"
 	"github.com/ananthakumaran/paisa/internal/agent/llm"
-	"github.com/ananthakumaran/paisa/internal/agent/parser"
+	"github.com/ananthakumaran/paisa/internal/agent/paisaclient"
+	"github.com/ananthakumaran/paisa/internal/agent/qa"
+	"github.com/ananthakumaran/paisa/internal/agent/router"
+	"github.com/ananthakumaran/paisa/internal/agent/sms"
 	"github.com/ananthakumaran/paisa/internal/agent/telegram"
 	log "github.com/sirupsen/logrus"
 )
+
+var intents = []llm.Intent{
+	{Name: "sms_ingest", Description: "a bank transaction SMS or alert (debit, credit, UPI, account balance notification)"},
+	{Name: "finance_qa", Description: "a question about the user's own finances (spending, net worth, balances, budget)"},
+}
 
 func main() {
 	cfgPath := flag.String("config", "paisa-agent.yaml", "path to paisa-agent.yaml")
@@ -31,6 +39,27 @@ func main() {
 	bot := telegram.NewBot(cfg.Telegram.BotToken, cfg.Telegram.ChatID)
 	store := approval.NewStore()
 
+	smsCap := &sms.Capability{Bot: bot, Store: store, Cfg: cfg}
+	qaCap := &qa.Capability{
+		Bot:    bot,
+		Ollama: cfg.Ollama,
+		Answerer: &qa.Answerer{
+			Client: paisaclient.New(cfg.Paisa.URL),
+			Now:    time.Now,
+		},
+	}
+
+	rt := router.New(
+		[]router.Capability{smsCap, qaCap},
+		func(text string) (string, error) {
+			return llm.ClassifyIntent(text, intents, cfg.Ollama)
+		},
+		func(text string) {
+			log.Infof("router: no capability claimed message — sending help")
+			bot.SendText(qa.HelpText)
+		},
+	)
+
 	log.Infof("paisa-agent started — polling Telegram (chat_id=%d)", cfg.Telegram.ChatID)
 
 	for {
@@ -44,93 +73,13 @@ func main() {
 			case u.CallbackQuery != nil:
 				handleCallback(u.CallbackQuery, bot, store, cfg)
 			case u.Message != nil:
-				handleMessage(u.Message, bot, store, cfg)
+				if u.Message.Chat.ID != cfg.Telegram.ChatID {
+					continue
+				}
+				rt.Route(u.Message.Chat.ID, u.Message.Text)
 			}
 		}
 	}
-}
-
-func handleMessage(msg *telegram.Message, bot *telegram.Bot, store *approval.Store, cfg *config.Config) {
-	if msg.Chat.ID != cfg.Telegram.ChatID {
-		return
-	}
-
-	// If this chat has an entry in editing state, route as an edit reply.
-	if pending := store.GetEditingByChatID(msg.Chat.ID); pending != nil {
-		log.Debugf("message: routing as edit reply for msgID=%d", pending.MessageID)
-		updated := telegram.ParseEditReply(msg.Text, pending.Entry)
-		store.Delete(pending.MessageID)
-		sendDraft(updated, bot, store, cfg)
-		return
-	}
-
-	preview := msg.Text
-	if len(preview) > 80 {
-		preview = preview[:80] + "…"
-	}
-	log.Infof("message: new SMS received (len=%d): %q", len(msg.Text), preview)
-
-	// Otherwise treat the message text as a new bank SMS.
-	entry, err := parseAndFill(msg.Text, cfg)
-	if err != nil {
-		log.Errorf("parse: %v", err)
-		bot.SendText(fmt.Sprintf("❌ Could not parse: %v", err))
-		return
-	}
-	log.Infof("parse: success — date=%q desc=%q amt=%q src=%q dest=%q",
-		entry.Date, entry.Desc, entry.Amt, entry.Src, entry.Dest)
-	sendDraft(*entry, bot, store, cfg)
-}
-
-func parseAndFill(sms string, cfg *config.Config) (*agentledger.Entry, error) {
-	rule, err := parser.Classify(sms, cfg.ParserRules.Accounts)
-	if err != nil {
-		return nil, err
-	}
-	log.Debugf("parse: classified as bank=%q destinations=%q", rule.Bank, rule.Destinations)
-
-	entry, err := parser.Parse(sms, rule, cfg.ParserRules.Merchants)
-	if err != nil {
-		return nil, err
-	}
-
-	needsLLM := entry.Dest == "" || entry.Desc == ""
-	if needsLLM {
-		log.Infof("parse: regex incomplete — desc=%q dest=%q — invoking LLM", entry.Desc, entry.Dest)
-		if llmErr := llm.FillMissing(sms, entry, cfg.Ollama); llmErr != nil {
-			log.Warnf("llm fallback: %v", llmErr)
-		}
-	}
-	return entry, nil
-}
-
-func sendDraft(entry agentledger.Entry, bot *telegram.Bot, store *approval.Store, cfg *config.Config) {
-	draftText := telegram.FormatDraft(entry)
-
-	dup, err := agentledger.IsDuplicate(cfg.Paisa.JournalDir, &entry)
-	if err != nil {
-		log.Warnf("duplicate check: %v", err)
-	}
-
-	var msgID int
-	if dup {
-		log.Infof("draft: sending as duplicate (date=%q amt=%q)", entry.Date, entry.Amt)
-		msgID, err = bot.SendDraftDuplicate(draftText)
-	} else {
-		msgID, err = bot.SendDraft(draftText)
-	}
-	if err != nil {
-		log.Errorf("send draft: %v", err)
-		return
-	}
-	log.Debugf("draft: sent msgID=%d", msgID)
-
-	store.Set(&approval.Pending{
-		Entry:     entry,
-		ChatID:    cfg.Telegram.ChatID,
-		MessageID: msgID,
-		Status:    approval.StatusPending,
-	})
 }
 
 func handleCallback(cb *telegram.CallbackQuery, bot *telegram.Bot, store *approval.Store, cfg *config.Config) {
