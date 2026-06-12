@@ -150,6 +150,21 @@ func TestAnswerBudgetStatus(t *testing.T) {
 	}
 }
 
+func TestAnswerBudgetStatusNoMatch(t *testing.T) {
+	srv := paisaStub(t)
+	defer srv.Close()
+	got, err := testAnswerer(t, srv).Answer(&Query{Intent: "budget_status", Category: "travel"})
+	if err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+	if !strings.Contains(got, "travel") || !strings.Contains(got, "Expenses:Food") {
+		t.Errorf("no-match reply should name the query and list budget accounts:\n%s", got)
+	}
+	if strings.Contains(got, "⚠️") {
+		t.Errorf("no-match reply must not include the full budget table:\n%s", got)
+	}
+}
+
 func TestAnswerServerDown(t *testing.T) {
 	a := &Answerer{Client: paisaclient.New("http://127.0.0.1:1"), Now: time.Now}
 	if _, err := a.Answer(&Query{Intent: "networth"}); err == nil {

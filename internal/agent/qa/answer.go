@@ -132,19 +132,21 @@ func (a *Answerer) budgetStatus(q *Query) (string, error) {
 			accounts[i] = b.Account
 		}
 		matched := MatchAccounts(q.Category, accounts)
-		if len(matched) > 0 {
-			matchedSet := make(map[string]bool, len(matched))
-			for _, m := range matched {
-				matchedSet[m] = true
-			}
-			var filtered []paisaclient.AccountBudget
-			for _, b := range budgets {
-				if matchedSet[b.Account] {
-					filtered = append(filtered, b)
-				}
-			}
-			budgets = filtered
+		if len(matched) == 0 {
+			return fmt.Sprintf("No budget account matches %q.\nKnown accounts: %s",
+				q.Category, strings.Join(accounts, ", ")), nil
 		}
+		matchedSet := make(map[string]bool, len(matched))
+		for _, m := range matched {
+			matchedSet[m] = true
+		}
+		var filtered []paisaclient.AccountBudget
+		for _, b := range budgets {
+			if matchedSet[b.Account] {
+				filtered = append(filtered, b)
+			}
+		}
+		budgets = filtered
 	}
 
 	lines := []string{fmt.Sprintf("📊 Budget — %s", now.Format("Jan 2006"))}
