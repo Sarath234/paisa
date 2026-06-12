@@ -15,6 +15,7 @@ func TestFormatINR(t *testing.T) {
 		{1234567.89, "₹12,34,567.89"},
 		{-980, "-₹980"},
 		{500000, "₹5,00,000"},
+		{1000000, "₹10,00,000"},
 	}
 	for _, c := range cases {
 		if got := FormatINR(c.in); got != c.want {

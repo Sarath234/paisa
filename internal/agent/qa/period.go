@@ -40,8 +40,10 @@ func ResolvePeriod(s string, now time.Time) (Period, bool) {
 	case "", "this month", "current month":
 		return monthPeriod(now.Year(), now.Month(), loc), true
 	case "last month", "previous month":
-		prev := now.AddDate(0, -1, 0)
-		return monthPeriod(prev.Year(), prev.Month(), loc), true
+		// time.Date normalizes month 0 to December of the previous year;
+		// going via day 1 avoids AddDate's end-of-month overflow (Mar 31 → Mar 3).
+		start := time.Date(now.Year(), now.Month()-1, 1, 0, 0, 0, 0, loc)
+		return monthPeriod(start.Year(), start.Month(), loc), true
 	case "this year", "current year":
 		start := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, loc)
 		return Period{Start: start, End: start.AddDate(1, 0, 0), Label: start.Format("2006")}, true
@@ -57,7 +59,7 @@ func ResolvePeriod(s string, now time.Time) (Period, bool) {
 					year = y.Year()
 				}
 			} else if month > now.Month() {
-				year-- // bare future month means the most recent occurrence
+				year-- // bare future month means the most recent occurrence; the current month stays in the current year
 			}
 			return monthPeriod(year, month, loc), true
 		}

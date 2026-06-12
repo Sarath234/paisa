@@ -6,6 +6,7 @@ import "strings"
 // MatchAccounts fuzzy-matches a user phrase against ledger account names.
 // Exact matches (full path or leaf segment, case-insensitive) win over
 // substring matches; substring matches are returned only when nothing is exact.
+// An exact match on the full path suppresses substring-only matches.
 func MatchAccounts(query string, accounts []string) []string {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
