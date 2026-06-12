@@ -11,16 +11,16 @@ import (
 )
 
 type Client struct {
-	baseURL string
-	http    *http.Client
+	baseURL    string
+	httpClient *http.Client
 }
 
 func New(baseURL string) *Client {
-	return &Client{baseURL: baseURL, http: &http.Client{Timeout: 10 * time.Second}}
+	return &Client{baseURL: baseURL, httpClient: &http.Client{Timeout: 10 * time.Second}}
 }
 
 func (c *Client) get(path string, out any) error {
-	resp, err := c.http.Get(c.baseURL + path)
+	resp, err := c.httpClient.Get(c.baseURL + path)
 	if err != nil {
 		return fmt.Errorf("paisa %s: %w", path, err)
 	}

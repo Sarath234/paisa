@@ -4,6 +4,7 @@ package paisaclient
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -105,5 +106,27 @@ func TestServerUnreachable(t *testing.T) {
 	_, err := New("http://127.0.0.1:1").Expenses()
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestNon200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	_, err := New(srv.URL).Expenses()
+	if err == nil || !strings.Contains(err.Error(), "status 503") {
+		t.Fatalf("want status-503 error, got %v", err)
+	}
+}
+
+func TestDecodeError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("<html>not json</html>"))
+	}))
+	defer srv.Close()
+	_, err := New(srv.URL).Expenses()
+	if err == nil || !strings.Contains(err.Error(), "decode") {
+		t.Fatalf("want decode error, got %v", err)
 	}
 }
