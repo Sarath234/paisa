@@ -110,3 +110,35 @@ func TestHandleUnparseableSMSSendsError(t *testing.T) {
 		t.Errorf("want parse-error message, got %v", bot.texts)
 	}
 }
+
+func TestHandleReplyPreservesOriginal(t *testing.T) {
+	store := approval.NewStore()
+	bot := &fakeBot{}
+	c := &Capability{Cfg: testConfig(t), Store: store, Bot: bot}
+
+	original := ledger.Entry{Desc: "Swiggy", Dest: "Expenses:Food:Generic"}
+	store.Set(&approval.Pending{
+		Entry:     ledger.Entry{Desc: "Swiggy", Date: "2026/06/03", Src: "Assets:Checking:HDFC", Amt: "-100 INR", Dest: "Expenses:Food:Generic"},
+		Original:  original,
+		ChatID:    42,
+		MessageID: 7,
+		Status:    approval.StatusPending,
+	})
+	store.SetEditing(7)
+
+	if err := c.HandleReply(42, "dest: Expenses:Food:Hyd"); err != nil {
+		t.Fatalf("HandleReply: %v", err)
+	}
+
+	// fakeBot.SendDraft returns len(drafts) as the messageID; after one call that's 1
+	newPending := store.Get(1)
+	if newPending == nil {
+		t.Fatal("new pending entry not found after HandleReply")
+	}
+	if newPending.Original.Desc != original.Desc {
+		t.Errorf("Original.Desc=%q want %q", newPending.Original.Desc, original.Desc)
+	}
+	if newPending.Original.Dest != original.Dest {
+		t.Errorf("Original.Dest=%q want %q", newPending.Original.Dest, original.Dest)
+	}
+}

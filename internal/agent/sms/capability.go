@@ -43,19 +43,22 @@ func (c *Capability) HasPending(chatID int64) bool {
 }
 
 // HandleReply merges an edit reply into the pending entry and re-sends the draft.
+// Preserves Original from the current pending across the edit round.
 func (c *Capability) HandleReply(chatID int64, text string) error {
 	pending := c.Store.GetEditingByChatID(chatID)
 	if pending == nil {
 		return nil
 	}
 	log.Debugf("sms: routing as edit reply for msgID=%d", pending.MessageID)
+	original := pending.Original // capture before delete
 	updated := telegram.ParseEditReply(text, pending.Entry)
 	c.Store.Delete(pending.MessageID)
-	c.sendDraft(updated)
+	c.sendDraft(updated, original)
 	return nil
 }
 
 // Handle treats the message as a new bank SMS: parse → LLM fill → draft.
+// On first parse, original == entry.
 func (c *Capability) Handle(text string) error {
 	preview := text
 	if len(preview) > 80 {
@@ -70,7 +73,7 @@ func (c *Capability) Handle(text string) error {
 	}
 	log.Infof("parse: success — date=%q desc=%q amt=%q src=%q dest=%q",
 		entry.Date, entry.Desc, entry.Amt, entry.Src, entry.Dest)
-	c.sendDraft(*entry)
+	c.sendDraft(*entry, *entry) // original == entry on first parse
 	return nil
 }
 
@@ -96,7 +99,8 @@ func (c *Capability) parseAndFill(sms string) (*agentledger.Entry, error) {
 	return entry, nil
 }
 
-func (c *Capability) sendDraft(entry agentledger.Entry) {
+// sendDraft formats and sends a draft, storing it with the original (pre-edit) entry.
+func (c *Capability) sendDraft(entry agentledger.Entry, original agentledger.Entry) {
 	draftText := telegram.FormatDraft(entry)
 
 	dup, err := agentledger.IsDuplicate(c.Cfg.Paisa.JournalDir, &entry)
@@ -120,6 +124,7 @@ func (c *Capability) sendDraft(entry agentledger.Entry) {
 
 	c.Store.Set(&approval.Pending{
 		Entry:     entry,
+		Original:  original,
 		ChatID:    c.Cfg.Telegram.ChatID,
 		MessageID: msgID,
 		Status:    approval.StatusPending,
