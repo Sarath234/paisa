@@ -145,6 +145,7 @@ func handleCallback(
 					Keyword:     kw,
 					Account:     acc,
 					Description: desc,
+					Status:      rulelearning.RuleStatusPending,
 				})
 				log.Infof("rulelearning: pending confirmation msgID=%d keyword=%q", ruleMsgID, kw)
 			}
