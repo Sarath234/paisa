@@ -83,7 +83,11 @@ func main() {
 				if u.Message.Chat.ID != cfg.Telegram.ChatID {
 					continue
 				}
-				rt.Route(u.Message.Chat.ID, u.Message.Text)
+				if ruleStore.GetEditingByChatID(u.Message.Chat.ID) != nil {
+					handleRuleEditReply(u.Message.Chat.ID, u.Message.Text, bot, ruleStore)
+				} else {
+					rt.Route(u.Message.Chat.ID, u.Message.Text)
+				}
 			}
 		}
 	}
@@ -197,5 +201,37 @@ func handleCallback(
 		bot.EditMessage(msgID, "⏭ Rule skipped")
 		ruleStore.Delete(msgID)
 		log.Debugf("rulelearning: rule skipped msgID=%d keyword=%q", msgID, rule.Keyword)
+
+	case "edit_rule":
+		rule := ruleStore.Get(msgID)
+		if rule == nil {
+			log.Debugf("edit_rule callback for unknown msgID=%d", msgID)
+			return
+		}
+		ruleStore.SetEditing(msgID)
+		bot.SendText(rulelearning.FormatEditTemplate(*rule))
+		log.Debugf("rulelearning: edit template sent msgID=%d keyword=%q", msgID, rule.Keyword)
 	}
+}
+
+func handleRuleEditReply(chatID int64, text string, bot *telegram.Bot, ruleStore *rulelearning.Store) {
+	rule := ruleStore.GetEditingByChatID(chatID)
+	if rule == nil {
+		return
+	}
+	updated := rulelearning.ParseEditReply(text, *rule)
+	confirmText := fmt.Sprintf(
+		"📝 Updated rule:\n  keyword: %q\n  account: %q\n  description: %q\n\nAdd to paisa-agent.yaml?",
+		updated.Keyword, updated.Account, updated.Description,
+	)
+	msgID, err := bot.SendRuleConfirmationFinal(confirmText)
+	if err != nil {
+		log.Errorf("rulelearning: send final confirmation: %v", err)
+		return // rule stays in editing state; next message retries
+	}
+	ruleStore.Delete(rule.MessageID)
+	updated.MessageID = msgID
+	updated.Status = rulelearning.RuleStatusPending
+	ruleStore.Set(&updated)
+	log.Infof("rulelearning: rule updated and re-confirmed msgID=%d keyword=%q", msgID, updated.Keyword)
 }
