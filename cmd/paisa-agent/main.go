@@ -128,9 +128,8 @@ func handleCallback(
 		if ok {
 			dup, err := config.IsDuplicateKeyword(cfgPath, kw)
 			if err != nil {
-				log.Warnf("rulelearning: duplicate check: %v", err)
-			}
-			if !dup {
+				log.Warnf("rulelearning: duplicate check: %v — skipping rule proposal", err)
+			} else if !dup {
 				confirmText := fmt.Sprintf(
 					"📝 New rule detected:\n  keyword: %q\n  account: %q\n  description: %q\n\nAdd to paisa-agent.yaml?",
 					kw, acc, desc,
@@ -196,5 +195,6 @@ func handleCallback(
 		}
 		bot.EditMessage(msgID, "⏭ Rule skipped")
 		ruleStore.Delete(msgID)
+		log.Debugf("rulelearning: rule skipped msgID=%d keyword=%q", msgID, rule.Keyword)
 	}
 }
