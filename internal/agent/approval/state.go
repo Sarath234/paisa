@@ -15,6 +15,7 @@ const (
 
 type Pending struct {
 	Entry     ledger.Entry
+	Original  ledger.Entry // parsed entry before any user edits; set once, never mutated
 	ChatID    int64
 	MessageID int
 	Status    Status
