@@ -61,8 +61,12 @@ func PrependMerchantRule(path string, rule MerchantRule) error {
 	result = append(result, newLines...)
 	result = append(result, lines[insertIdx:]...)
 
+	fi, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(strings.Join(result, "\n")), 0644); err != nil {
+	if err := os.WriteFile(tmp, []byte(strings.Join(result, "\n")), fi.Mode()); err != nil {
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
