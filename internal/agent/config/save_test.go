@@ -105,3 +105,26 @@ func TestIsDuplicateKeyword(t *testing.T) {
 		t.Error("blinkit not in fixture — want duplicate=false")
 	}
 }
+
+func TestPrependMerchantRule_specialCharsEscaped(t *testing.T) {
+	path := writeTmp(t, yamlFixture)
+	rule := MerchantRule{
+		Keyword:     `cafe"bar`,
+		Account:     `Expenses:Food:Hyd`,
+		Description: `Cafe "Bar"`,
+	}
+
+	if err := PrependMerchantRule(path, rule); err != nil {
+		t.Fatalf("PrependMerchantRule: %v", err)
+	}
+
+	out, _ := os.ReadFile(path)
+	got := string(out)
+
+	if !strings.Contains(got, `keyword: "cafe\"bar"`) {
+		t.Errorf("expected escaped keyword in output, got:\n%s", got)
+	}
+	if !strings.Contains(got, `description: "Cafe \"Bar\""`) {
+		t.Errorf("expected escaped description in output, got:\n%s", got)
+	}
+}

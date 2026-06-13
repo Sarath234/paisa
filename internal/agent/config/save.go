@@ -9,13 +9,20 @@ import (
 
 var ErrDuplicateKeyword = errors.New("keyword already exists in merchants list")
 
+// yamlEscape returns s with " and \ escaped for embedding in a YAML double-quoted string.
+func yamlEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return s
+}
+
 // IsDuplicateKeyword reports whether keyword already appears in the raw YAML at path.
 func IsDuplicateKeyword(path, keyword string) (bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
 	}
-	return strings.Contains(string(data), `keyword: "`+keyword+`"`), nil
+	return strings.Contains(string(data), `keyword: "`+yamlEscape(keyword)+`"`), nil
 }
 
 // PrependMerchantRule inserts rule at the top of the merchants: list in the YAML
@@ -27,7 +34,7 @@ func PrependMerchantRule(path string, rule MerchantRule) error {
 		return err
 	}
 	content := string(data)
-	if strings.Contains(content, `keyword: "`+rule.Keyword+`"`) {
+	if strings.Contains(content, `keyword: "`+yamlEscape(rule.Keyword)+`"`) {
 		return ErrDuplicateKeyword
 	}
 
@@ -44,9 +51,9 @@ func PrependMerchantRule(path string, rule MerchantRule) error {
 	}
 
 	newLines := []string{
-		`    - keyword: "` + rule.Keyword + `"`,
-		`      account: "` + rule.Account + `"`,
-		`      description: "` + rule.Description + `"`,
+		`    - keyword: "` + yamlEscape(rule.Keyword) + `"`,
+		`      account: "` + yamlEscape(rule.Account) + `"`,
+		`      description: "` + yamlEscape(rule.Description) + `"`,
 	}
 
 	result := make([]string, 0, len(lines)+len(newLines))
@@ -58,5 +65,9 @@ func PrependMerchantRule(path string, rule MerchantRule) error {
 	if err := os.WriteFile(tmp, []byte(strings.Join(result, "\n")), 0644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
 }
