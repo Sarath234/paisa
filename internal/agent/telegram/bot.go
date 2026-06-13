@@ -126,6 +126,15 @@ func (b *Bot) SendDraftDuplicate(text string) (int, error) {
 	}})
 }
 
+// SendRuleConfirmation sends a rule-learning prompt with ✅ Add rule / ⏭ Skip buttons.
+// Returns the sent message's ID for later editing.
+func (b *Bot) SendRuleConfirmation(text string) (int, error) {
+	return b.sendWithKeyboard(text, [][]inlineButton{{
+		{Text: "✅ Add rule", CallbackData: "add_rule"},
+		{Text: "⏭ Skip", CallbackData: "skip_rule"},
+	}})
+}
+
 func (b *Bot) sendWithKeyboard(text string, buttons [][]inlineButton) (int, error) {
 	result, err := b.post("sendMessage", map[string]any{
 		"chat_id":      b.ChatID,
