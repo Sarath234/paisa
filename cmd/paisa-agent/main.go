@@ -208,8 +208,11 @@ func handleCallback(
 			log.Debugf("edit_rule callback for unknown msgID=%d", msgID)
 			return
 		}
+		if err := bot.SendText(rulelearning.FormatEditTemplate(*rule)); err != nil {
+			log.Errorf("rulelearning: send edit template: %v", err)
+			return
+		}
 		ruleStore.SetEditing(msgID)
-		bot.SendText(rulelearning.FormatEditTemplate(*rule))
 		log.Debugf("rulelearning: edit template sent msgID=%d keyword=%q", msgID, rule.Keyword)
 	}
 }
