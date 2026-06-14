@@ -41,6 +41,11 @@ func ClearInterestCache() {
 	irepaymentCache = interestRepaymentCache{}
 }
 
+func PreloadInterestCache(db *gorm.DB) {
+	icache.Do(func() { loadInterestCache(db) })
+	irepaymentCache.Do(func() { loadInterestRepaymentCache(db) })
+}
+
 func CapitalGainsSourceAccount(account string) string {
 	parts := strings.Split(account, ":")
 	return "Assets:" + strings.Join(parts[2:], ":")

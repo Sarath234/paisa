@@ -99,6 +99,10 @@ func ClearPriceCache() {
 	pcachePtr.Store(nil)
 }
 
+func PreloadPriceCache(db *gorm.DB) {
+	ensureCache(db)
+}
+
 func GetUnitPrice(db *gorm.DB, commodity string, date time.Time) price.Price {
 	c := ensureCache(db)
 
