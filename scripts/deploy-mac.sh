@@ -5,7 +5,7 @@
 set -euo pipefail
 
 LOG="$HOME/Documents/paisa/log.txt"
-INSTALL_PATH="/usr/local/bin/paisa"
+# INSTALL_PATH="/usr/local/bin/paisa"
 
 # Prompt for sudo password upfront
 sudo -v
