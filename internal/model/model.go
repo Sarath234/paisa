@@ -38,32 +38,42 @@ func SyncJournal(db *gorm.DB) (string, error) {
 	AutoMigrate(db)
 	log.Info("Syncing transactions from journal")
 
-	errors, _, err := ledger.Cli().ValidateFile(config.GetJournalPath())
-	if err != nil {
+	journalPath := config.GetJournalPath()
 
-		if len(errors) == 0 {
-			return err.Error(), err
-		}
-
-		var message string
-		for _, error := range errors {
-			message += error.Message + "\n\n"
-		}
-		return strings.TrimRight(message, "\n"), err
+	type pricesResult struct {
+		prices []price.Price
+		err    error
+	}
+	type postingsResult struct {
+		postings []*posting.Posting
+		err      error
 	}
 
-	prices, err := ledger.Cli().Prices(config.GetJournalPath())
-	if err != nil {
-		return err.Error(), err
+	pricesCh := make(chan pricesResult, 1)
+	postingsCh := make(chan postingsResult, 1)
+
+	go func() {
+		ps, err := ledger.Cli().Prices(journalPath)
+		pricesCh <- pricesResult{ps, err}
+	}()
+
+	go func() {
+		ps, err := ledger.Cli().Parse(journalPath, nil)
+		postingsCh <- postingsResult{ps, err}
+	}()
+
+	pr := <-pricesCh
+	if pr.err != nil {
+		return pr.err.Error(), pr.err
 	}
 
-	price.UpsertAllByType(db, config.Unknown, prices)
-
-	postings, err := ledger.Cli().Parse(config.GetJournalPath(), prices)
-	if err != nil {
-		return err.Error(), err
+	por := <-postingsCh
+	if por.err != nil {
+		return por.err.Error(), por.err
 	}
-	posting.UpsertAll(db, postings)
+
+	price.UpsertAllByType(db, config.Unknown, pr.prices)
+	posting.UpsertAll(db, por.postings)
 
 	return "", nil
 }
