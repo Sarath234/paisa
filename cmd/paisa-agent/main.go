@@ -4,18 +4,22 @@ package main
 import (
 	"flag"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/agent/approval"
 	"github.com/ananthakumaran/paisa/internal/agent/config"
+	"github.com/ananthakumaran/paisa/internal/agent/gmail"
 	agentledger "github.com/ananthakumaran/paisa/internal/agent/ledger"
 	"github.com/ananthakumaran/paisa/internal/agent/llm"
 	"github.com/ananthakumaran/paisa/internal/agent/paisaclient"
 	"github.com/ananthakumaran/paisa/internal/agent/qa"
+	"github.com/ananthakumaran/paisa/internal/agent/reconcile"
 	"github.com/ananthakumaran/paisa/internal/agent/router"
 	"github.com/ananthakumaran/paisa/internal/agent/rulelearning"
 	"github.com/ananthakumaran/paisa/internal/agent/sms"
+	"github.com/ananthakumaran/paisa/internal/agent/statement"
 	"github.com/ananthakumaran/paisa/internal/agent/telegram"
 	log "github.com/sirupsen/logrus"
 )
@@ -41,6 +45,59 @@ func main() {
 	}
 
 	bot := telegram.NewBot(cfg.Telegram.BotToken, cfg.Telegram.ChatID)
+
+	var gmailClient *gmail.Client
+	var gmailPoller *gmail.Poller
+
+	if cfg.Gmail != nil {
+		var err error
+		gmailClient, err = gmail.New(cfg.Gmail.ClientID, cfg.Gmail.ClientSecret, cfg.Gmail.TokenFile)
+		if err != nil {
+			log.Fatalf("gmail: init: %v", err)
+		}
+
+		parsers := []statement.Parser{&statement.AxisParser{}}
+		pc := paisaclient.New(cfg.Paisa.URL)
+		stateDir := filepath.Dir(cfg.Gmail.TokenFile)
+
+		var subjectMatches []gmail.SubjectMatch
+		for _, sa := range cfg.Gmail.Accounts {
+			subjectMatches = append(subjectMatches, gmail.SubjectMatch{
+				Pattern:       sa.SubjectMatch,
+				LedgerAccount: sa.LedgerAccount,
+			})
+		}
+
+		gmailPoller = gmail.NewPoller(gmailClient, subjectMatches, stateDir, func(ev gmail.StatementEmail) {
+			handleStatementEmail(ev, parsers, pc, cfg.Paisa.JournalDir, bot)
+		})
+
+		if !gmailClient.IsAuthorized() {
+			authURL := gmailClient.AuthURL()
+			msg := fmt.Sprintf("Gmail auth required. Opening browser for OAuth...\nIf browser doesn't open, visit:\n%s", authURL)
+			bot.SendText(msg) //nolint:errcheck
+			log.Infof("gmail: auth required — starting local callback server on :8787")
+			go func() {
+				code, err := gmail.OAuthCallbackServer()
+				if err != nil {
+					log.Errorf("gmail: oauth callback: %v", err)
+					bot.SendText("❌ Gmail OAuth timed out. Restart the agent to try again.") //nolint:errcheck
+					return
+				}
+				if err := gmailClient.ExchangeCode(code); err != nil {
+					log.Errorf("gmail: exchange code: %v", err)
+					bot.SendText(fmt.Sprintf("❌ Gmail auth failed: %v", err)) //nolint:errcheck
+					return
+				}
+				bot.SendText("✅ Gmail connected — will poll for statements every 5 minutes") //nolint:errcheck
+				log.Infof("gmail: authorised")
+				go gmailPoller.Start()
+			}()
+		} else {
+			go gmailPoller.Start()
+		}
+	}
+
 	store := approval.NewStore()
 	ruleStore := rulelearning.NewStore()
 
@@ -237,4 +294,103 @@ func handleRuleEditReply(chatID int64, text string, bot *telegram.Bot, ruleStore
 	updated.Status = rulelearning.RuleStatusPending
 	ruleStore.Set(&updated)
 	log.Infof("rulelearning: rule updated and re-confirmed msgID=%d keyword=%q", msgID, updated.Keyword)
+}
+
+func handleStatementEmail(
+	ev gmail.StatementEmail,
+	parsers []statement.Parser,
+	pc *paisaclient.Client,
+	journalDir string,
+	bot *telegram.Bot,
+) {
+	var result statement.ParseResult
+	var parsed bool
+	for _, p := range parsers {
+		if !p.Detect(ev.Subject) {
+			continue
+		}
+		r, err := p.Parse(ev.PDFBytes)
+		if err != nil {
+			log.Errorf("statement: parse %s: %v", p.Name(), err)
+			bot.SendText(fmt.Sprintf("❌ Failed to parse statement (%s): %v", p.Name(), err)) //nolint:errcheck
+			return
+		}
+		result = r
+		parsed = true
+		break
+	}
+	if !parsed {
+		log.Warnf("statement: no parser matched subject=%q", ev.Subject)
+		bot.SendText(fmt.Sprintf("❌ No parser matched statement email: %q", ev.Subject)) //nolint:errcheck
+		return
+	}
+
+	postings, err := pc.Postings()
+	if err != nil {
+		log.Errorf("reconcile: fetch postings: %v", err)
+		bot.SendText(fmt.Sprintf("❌ Failed to fetch ledger for %s: %v", ev.LedgerAccount, err)) //nolint:errcheck
+		return
+	}
+
+	var entries []reconcile.LedgerEntry
+	for _, p := range postings {
+		if p.Account != ev.LedgerAccount {
+			continue
+		}
+		if int(p.Date.Month()) != int(result.Month) || p.Date.Year() != result.Year {
+			continue
+		}
+		entries = append(entries, reconcile.LedgerEntry{
+			Date:        p.Date,
+			Description: p.Payee,
+			Amount:      p.Amount,
+		})
+	}
+
+	diff := reconcile.Compare(result, entries)
+	diff.Account = ev.LedgerAccount
+
+	rec := reconcile.Record{
+		Period:      fmt.Sprintf("%04d-%02d", result.Year, int(result.Month)),
+		GeneratedAt: time.Now(),
+		Diff:        diff,
+	}
+	if err := reconcile.Write(journalDir, rec); err != nil {
+		log.Errorf("reconcile: write store: %v", err)
+	}
+
+	// Telegram report.
+	var sb strings.Builder
+	acctShort := ev.LedgerAccount
+	if idx := strings.LastIndex(acctShort, ":"); idx >= 0 {
+		acctShort = acctShort[idx+1:]
+	}
+	fmt.Fprintf(&sb, "📊 %s — %s %d\n\n", acctShort, result.Month, result.Year)
+	fmt.Fprintf(&sb, "Closing balance: ₹%.2f\n", result.ClosingBalance)
+	fmt.Fprintf(&sb, "Statement txns: %d | Matched in ledger: %d\n\n",
+		len(result.Transactions), len(result.Transactions)-len(diff.Missing))
+
+	if len(diff.Missing) == 0 && len(diff.Extra) == 0 {
+		sb.WriteString("✅ All transactions matched\n")
+	}
+	if len(diff.Missing) > 0 {
+		fmt.Fprintf(&sb, "❌ %d missing from ledger:\n", len(diff.Missing))
+		for _, tx := range diff.Missing {
+			if tx.Debit > 0 {
+				fmt.Fprintf(&sb, "  • %s %s  -₹%.2f\n", tx.Date.Format("02-01"), tx.Description, tx.Debit)
+			} else {
+				fmt.Fprintf(&sb, "  • %s %s  +₹%.2f\n", tx.Date.Format("02-01"), tx.Description, tx.Credit)
+			}
+		}
+	}
+	if len(diff.Extra) > 0 {
+		fmt.Fprintf(&sb, "⚠️ %d extra in ledger (not in statement):\n", len(diff.Extra))
+		for _, le := range diff.Extra {
+			fmt.Fprintf(&sb, "  • %s %s  %.2f\n", le.Date.Format("02-01"), le.Description, le.Amount)
+		}
+	}
+
+	if err := bot.SendText(sb.String()); err != nil {
+		log.Errorf("reconcile: send Telegram report: %v", err)
+	}
 }
