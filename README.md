@@ -25,9 +25,26 @@ A Go sidecar that connects Paisa to Telegram, Gmail, and a local LLM (via Ollama
 - `paisa.url` and `paisa.journal_dir`
 - `telegram.bot_token` and `telegram.chat_id`
 - `ollama.url` and `ollama.model` (e.g. `gemma3:4b`)
-- `gmail.*` (optional) — OAuth2 credentials from Google Cloud Console for statement reconciliation
+- `gmail.*` (optional) — OAuth2 credentials for statement reconciliation (see setup below)
 
 **Run:** `./paisa-agent --config /path/to/paisa-agent.yaml`
+
+### Gmail setup (statement reconciliation)
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com) → create a project → enable the **Gmail API**.
+2. Create **OAuth 2.0 credentials** (type: Desktop app). Copy the client ID and secret.
+3. Add to `paisa-agent.yaml`:
+   ```yaml
+   gmail:
+     client_id: "YOUR_CLIENT_ID"
+     client_secret: "YOUR_CLIENT_SECRET"
+     token_file: "/Users/YOU/.paisa-agent/gmail-token.json"
+     statement_accounts:
+       - subject_match: "6386"          # substring matched against email subject
+         ledger_account: "Assets:Checking:AXIS6386"
+   ```
+4. Start the agent. On first run it sends you an OAuth URL via Telegram and starts a local server on `:8787` to capture the redirect. Open the URL in a browser, approve access, and the agent saves a refresh token automatically.
+5. Subsequent restarts load the saved token silently — no re-auth needed.
 
 ## Status
 
