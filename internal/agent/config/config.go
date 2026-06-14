@@ -12,6 +12,7 @@ type Config struct {
 	Ollama      OllamaConfig   `yaml:"ollama"`
 	Telegram    TelegramConfig `yaml:"telegram"`
 	ParserRules ParserRules    `yaml:"parser_rules"`
+	Gmail       *GmailConfig   `yaml:"gmail,omitempty"`
 }
 
 type PaisaConfig struct {
@@ -51,6 +52,18 @@ type MerchantRule struct {
 	Keyword     string `yaml:"keyword"`
 	Account     string `yaml:"account"`
 	Description string `yaml:"description"`
+}
+
+type GmailConfig struct {
+	ClientID     string             `yaml:"client_id"`
+	ClientSecret string             `yaml:"client_secret"`
+	TokenFile    string             `yaml:"token_file"`
+	Accounts     []StatementAccount `yaml:"statement_accounts"`
+}
+
+type StatementAccount struct {
+	SubjectMatch  string `yaml:"subject_match"`
+	LedgerAccount string `yaml:"ledger_account"`
 }
 
 func Load(path string) (*Config, error) {
