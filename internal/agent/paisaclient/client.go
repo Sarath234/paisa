@@ -115,3 +115,14 @@ func (c *Client) BudgetForMonth(month string) ([]AccountBudget, error) {
 	}
 	return r.BudgetsByMonth[month].Accounts, nil
 }
+
+// Postings returns all postings from the ledger (GET /api/ledger).
+func (c *Client) Postings() ([]Posting, error) {
+	var r struct {
+		Postings []Posting `json:"postings"`
+	}
+	if err := c.get("/api/ledger", &r); err != nil {
+		return nil, err
+	}
+	return r.Postings, nil
+}
