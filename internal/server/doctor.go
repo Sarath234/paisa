@@ -1,9 +1,11 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -79,7 +81,13 @@ func init() {
 				Level:       WARN,
 				Summary:     "Asset Accounts missing from Allocation Target",
 				Description: "Asset accounts are not part of any allocation target."},
-			Predicate: ruleAllocationTargetMissingAssetAccounts}}
+			Predicate: ruleAllocationTargetMissingAssetAccounts},
+		{
+			Issue: Issue{
+				Level:       WARN,
+				Summary:     "Statement reconciliation issue",
+				Description: "One or more bank statement reconciliation checks failed."},
+			Predicate: ruleStatementReconciliation}}
 }
 
 func GetDiagnosis(db *gorm.DB) gin.H {
@@ -173,6 +181,76 @@ func formatPosting(p posting.Posting) string {
 
 	postingUrl := fmt.Sprintf("/ledger/editor/%s#%d", url.PathEscape(p.FileName), p.TransactionBeginLine)
 	return fmt.Sprintf("<a href=\"%s\"> %s\t%s\t%s</a>", postingUrl, p.Date.Format(DATE_FORMAT), p.Account, price)
+}
+
+func ruleStatementReconciliation(db *gorm.DB) []error {
+	errs := make([]error, 0)
+
+	journalDir := filepath.Dir(config.GetJournalPath())
+	path := filepath.Join(journalDir, "reconciliation.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return errs // no reconciliation run yet — not an error
+		}
+		return errs // silently ignore read errors
+	}
+
+	var records []struct {
+		Period string `json:"period"`
+		Diff   struct {
+			Account        string  `json:"account"`
+			Month          int     `json:"month"`
+			Year           int     `json:"year"`
+			StatementClose float64 `json:"statement_close"`
+			Missing        []struct {
+				Date        string  `json:"date"`
+				Description string  `json:"description"`
+				Debit       float64 `json:"debit"`
+				Credit      float64 `json:"credit"`
+			} `json:"missing"`
+			Extra []struct {
+				Date        string  `json:"date"`
+				Description string  `json:"description"`
+				Amount      float64 `json:"amount"`
+			} `json:"extra"`
+		} `json:"diff"`
+	}
+
+	if err := json.Unmarshal(data, &records); err != nil {
+		return errs
+	}
+
+	for _, r := range records {
+		d := r.Diff
+		label := fmt.Sprintf("%s — %04d-%02d", d.Account, d.Year, d.Month)
+
+		if len(d.Missing) > 0 {
+			var details strings.Builder
+			for _, m := range d.Missing {
+				if m.Debit > 0 {
+					fmt.Fprintf(&details, "• %s %s  -₹%.2f\n", m.Date, m.Description, m.Debit)
+				} else {
+					fmt.Fprintf(&details, "• %s %s  +₹%.2f\n", m.Date, m.Description, m.Credit)
+				}
+			}
+			errs = append(errs, errors.New(fmt.Sprintf(
+				"<b>%d transaction(s) missing from ledger</b> (%s)\n%s",
+				len(d.Missing), label, details.String())))
+		}
+
+		if len(d.Extra) > 0 {
+			var details strings.Builder
+			for _, e := range d.Extra {
+				fmt.Fprintf(&details, "• %s %s  %.2f\n", e.Date, e.Description, e.Amount)
+			}
+			errs = append(errs, errors.New(fmt.Sprintf(
+				"<b>%d extra ledger entr(ies) not in statement</b> (%s)\n%s",
+				len(d.Extra), label, details.String())))
+		}
+	}
+
+	return errs
 }
 
 func ruleAllocationTargetMissingAssetAccounts(db *gorm.DB) []error {
