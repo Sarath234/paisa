@@ -29,6 +29,18 @@ A Go sidecar that connects Paisa to Telegram, Gmail, and a local LLM (via Ollama
 
 **Run:** `./paisa-agent --config /path/to/paisa-agent.yaml`
 
+### Telegram setup
+
+1. Open Telegram and message [@BotFather](https://t.me/BotFather) → `/newbot` → follow prompts to get a **bot token**.
+2. Start a chat with your new bot (search its username and press Start).
+3. Send any message to the bot, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser. Find `"chat":{"id":...}` — that's your **chat ID**.
+4. Add to `paisa-agent.yaml`:
+   ```yaml
+   telegram:
+     bot_token: "1234567890:AAG..."
+     chat_id: 5987311199
+   ```
+
 ### Gmail setup (statement reconciliation)
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com) → create a project → enable the **Gmail API**.
