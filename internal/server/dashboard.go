@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/ananthakumaran/paisa/internal/accounting"
+	"github.com/ananthakumaran/paisa/internal/model/transaction"
 	"github.com/ananthakumaran/paisa/internal/query"
 	"github.com/ananthakumaran/paisa/internal/server/assets"
 	"github.com/ananthakumaran/paisa/internal/server/goal"
@@ -13,17 +14,24 @@ import (
 )
 
 func GetDashboard(db *gorm.DB) gin.H {
-	// Warm service caches concurrently before the main computation.
-	// SQLite runs in WAL mode so concurrent reads are safe.
+	// Fire interest and price cache loads in background goroutines.
+	// SQLite WAL mode allows concurrent reads so these overlap safely.
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(2)
 	go func() { defer wg.Done(); service.PreloadInterestCache(db) }()
 	go func() { defer wg.Done(); service.PreloadPriceCache(db) }()
-	go func() { defer wg.Done(); accounting.AllAccounts(db) }()
+
+	// Load all postings in the main goroutine concurrently with the goroutines
+	// above — four DB reads in flight at once instead of sequential.
+	allPostings := query.Init(db).All()
+	// Prime transaction cache from the postings we just loaded; zero extra DB
+	// round-trip vs. the lazy load that used to fire mid-computation.
+	transaction.PreloadCacheFromPostings(allPostings)
+	// AllAccounts is a cheap Distinct Pluck; no dedicated goroutine needed.
+	accounting.AllAccounts(db)
+
 	wg.Wait()
 
-	// Fetch all postings once; sub-functions filter in-memory.
-	allPostings := query.Init(db).All()
 	forecastExpenses := query.Init(db).Forecast().Like("Expenses:%").UntilThisMonthEnd().All()
 
 	return gin.H{

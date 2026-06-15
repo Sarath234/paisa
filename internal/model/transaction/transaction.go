@@ -45,6 +45,18 @@ func GetById(db *gorm.DB, id string) (Transaction, bool) {
 	return t, found
 }
 
+// PreloadCacheFromPostings primes the transaction cache from an already-loaded
+// posting slice, avoiding a redundant DB round-trip when the caller has all
+// postings in memory.
+func PreloadCacheFromPostings(postings []posting.Posting) {
+	tcache.Do(func() {
+		tcache.transactions = make(map[string]Transaction)
+		for _, t := range Build(postings) {
+			tcache.transactions[t.ID] = t
+		}
+	})
+}
+
 func ClearCache() {
 	tcache = transactionCache{}
 }
