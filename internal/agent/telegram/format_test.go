@@ -2,10 +2,10 @@
 package telegram_test
 
 import (
-	"testing"
 	"github.com/ananthakumaran/paisa/internal/agent/ledger"
 	"github.com/ananthakumaran/paisa/internal/agent/telegram"
 	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 var testEntry = ledger.Entry{

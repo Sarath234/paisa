@@ -2,13 +2,7 @@ import * as d3 from "d3";
 import _ from "lodash";
 import tippy from "tippy.js";
 import COLORS from "./colors";
-import {
-  formatCurrency,
-  formatCurrencyCrude,
-  isMobile,
-  tooltip,
-  type Legend
-} from "./utils";
+import { formatCurrency, formatCurrencyCrude, isMobile, tooltip, type Legend } from "./utils";
 
 export interface ProjectionPoint {
   date: Date;
@@ -90,12 +84,9 @@ export function renderProjection(
 
   const right = isMobile() ? 10 : 80;
   const margin = { top: 15, right, bottom: 20, left: 40 };
-  const width =
-    Math.max(element.parentElement.clientWidth, 800) - margin.left - margin.right;
+  const width = Math.max(element.parentElement.clientWidth, 800) - margin.left - margin.right;
   const height = +svg.attr("height") - margin.top - margin.bottom;
-  const g = svg
-    .append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
   svg.attr("width", width + margin.left + margin.right);
 
@@ -149,9 +140,10 @@ export function renderProjection(
   }
 
   // Projection lines (dashed) — prepend last historical point so lines connect
-  const connectInv = historicalPoints.length > 0
-    ? [historicalPoints[historicalPoints.length - 1], ...projectionPoints]
-    : projectionPoints;
+  const connectInv =
+    historicalPoints.length > 0
+      ? [historicalPoints[historicalPoints.length - 1], ...projectionPoints]
+      : projectionPoints;
   const connectNW = connectInv;
 
   drawLine(g, connectInv, x, y, (d) => d.investment, COLORS.secondary, true);
@@ -160,8 +152,10 @@ export function renderProjection(
   // "Today" vertical marker
   const todayX = x(projectionPoints[0].date);
   g.append("line")
-    .attr("x1", todayX).attr("x2", todayX)
-    .attr("y1", 0).attr("y2", height)
+    .attr("x1", todayX)
+    .attr("x2", todayX)
+    .attr("y1", 0)
+    .attr("y2", height)
     .style("stroke", "#888")
     .style("stroke-width", "1")
     .style("stroke-dasharray", "3,3");

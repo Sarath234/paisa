@@ -379,6 +379,14 @@ func Build(db *gorm.DB, enableCompression bool) *gin.Engine {
 		c.JSON(200, GetCreditCard(db, c.Param("account")))
 	})
 
+	router.POST("/api/agent/parse", func(c *gin.Context) {
+		ParseSMS(c)
+	})
+
+	router.POST("/api/agent/post", func(c *gin.Context) {
+		PostTransaction(c)
+	})
+
 	router.NoRoute(func(c *gin.Context) {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(web.Index))
 	})
