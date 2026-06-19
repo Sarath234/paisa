@@ -387,6 +387,10 @@ func Build(db *gorm.DB, enableCompression bool) *gin.Engine {
 		PostTransaction(c)
 	})
 
+	router.POST("/api/agent/chat", func(c *gin.Context) {
+		ChatWithAgent(c)
+	})
+
 	router.NoRoute(func(c *gin.Context) {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(web.Index))
 	})

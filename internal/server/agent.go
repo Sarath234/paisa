@@ -10,6 +10,7 @@ import (
 
 const agentParseURL = "http://127.0.0.1:7501/parse"
 const agentPostURL = "http://127.0.0.1:7501/post"
+const agentChatURL = "http://127.0.0.1:7501/chat"
 
 func ParseSMS(c *gin.Context) {
 	proxyToAgent(c, agentParseURL)
@@ -17,6 +18,10 @@ func ParseSMS(c *gin.Context) {
 
 func PostTransaction(c *gin.Context) {
 	proxyToAgent(c, agentPostURL)
+}
+
+func ChatWithAgent(c *gin.Context) {
+	proxyToAgent(c, agentChatURL)
 }
 
 func proxyToAgent(c *gin.Context, url string) {
