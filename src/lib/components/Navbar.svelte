@@ -319,6 +319,15 @@
           {/if}
 
           <p class="control">
+            <a
+              href="/assistant"
+              class="button is-small is-rounded"
+              data-tippy-content="<p>Finance assistant</p>"
+            >
+              <span class="icon is-small"><i class="fas fa-comment-dots" /></span>
+            </a>
+          </p>
+          <p class="control">
             <NavSearch on:search={() => dispatch("search")} />
           </p>
           <p class="control">
