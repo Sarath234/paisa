@@ -155,6 +155,7 @@ func handleCallback(cb *telegram.CallbackQuery, bot *telegram.Bot, store *approv
 
 	switch strings.ToLower(cb.Data) {
 	case "approve":
+		pending.Entry.Source = "telegram_approved"
 		if err := agentledger.Append(cfg.Paisa.JournalDir, &pending.Entry); err != nil {
 			log.Errorf("append entry: %v", err)
 			bot.EditMessage(msgID, "❌ Failed to post: "+err.Error())
@@ -214,6 +215,7 @@ func serveHTTP(cfg *config.Config) {
 			return
 		}
 		entry := req.Entry
+		entry.Source = "ui"
 		if !req.Force {
 			dup, err := agentledger.IsDuplicate(cfg.Paisa.JournalDir, &entry)
 			if err != nil {
