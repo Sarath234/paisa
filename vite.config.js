@@ -1,19 +1,10 @@
 import { sveltekit } from "@sveltejs/kit/vite";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
-import { resolve } from "path";
 
 /** @type {import('vite').UserConfig} */
 const config = {
   build: {
     target: 'es2021'
-  },
-  resolve: {
-    alias: {
-      "svelte-file-dropzone": resolve("./node_modules/svelte-file-dropzone/dist/index.js")
-    }
-  },
-  optimizeDeps: {
-    exclude: ["svelte-file-dropzone"]
   },
   plugins: [
     sveltekit(),
