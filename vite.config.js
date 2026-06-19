@@ -6,6 +6,9 @@ const config = {
   build: {
     target: 'es2021'
   },
+  resolve: {
+    conditions: ["svelte"]
+  },
   plugins: [
     sveltekit(),
     nodePolyfills({
