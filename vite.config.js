@@ -9,6 +9,12 @@ const config = {
   resolve: {
     conditions: ["svelte"]
   },
+  optimizeDeps: {
+    exclude: ["svelte-file-dropzone"]
+  },
+  ssr: {
+    noExternal: ["svelte-file-dropzone"]
+  },
   plugins: [
     sveltekit(),
     nodePolyfills({
