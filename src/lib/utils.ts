@@ -783,6 +783,16 @@ export function ajax(
 
 export function ajax(route: "/api/ping"): Promise<{ success: boolean; error?: string }>;
 
+export function ajax(
+  route: "/api/agent/parse",
+  options?: RequestOptions
+): Promise<{ date: string; desc: string; src: string; amt: string; dest: string; error?: string }>;
+
+export function ajax(
+  route: "/api/agent/post",
+  options?: RequestOptions
+): Promise<{ status: string; error?: string }>;
+
 export async function ajax(
   route: string,
   options?: RequestOptions,

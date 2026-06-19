@@ -36,12 +36,11 @@
     const visible = insights.filter((i) => !i.suppress);
     const byGroup = _.groupBy(visible, insightGroup);
 
-    groups = GROUP_ORDER.filter((g) => byGroup[g]?.length)
-      .map((g) => ({
-        key: g,
-        label: GROUP_LABEL[g],
-        items: _.orderBy(byGroup[g], (i) => Math.abs(i.delta_pct), "desc")
-      }));
+    groups = GROUP_ORDER.filter((g) => byGroup[g]?.length).map((g) => ({
+      key: g,
+      label: GROUP_LABEL[g],
+      items: _.orderBy(byGroup[g], (i) => Math.abs(i.delta_pct), "desc")
+    }));
 
     loaded = true;
   });

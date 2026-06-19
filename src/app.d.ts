@@ -98,6 +98,17 @@ declare module "compute-cosine-similarity" {
   export default function similarity(a: number[], b: number[]): number;
 }
 
+declare module "svelte-file-dropzone" {
+  import type { SvelteComponentTyped } from "svelte";
+  interface DropzoneProps {
+    accept?: string | string[];
+    multiple?: boolean;
+    disabled?: boolean;
+    [key: string]: any;
+  }
+  export default class Dropzone extends SvelteComponentTyped<DropzoneProps> {}
+}
+
 declare module "svelte-carousel" {
   import type { SvelteComponentTyped } from "svelte";
 

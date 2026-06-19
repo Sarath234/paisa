@@ -77,6 +77,11 @@ func (c *Capability) Handle(text string) error {
 	return nil
 }
 
+// ParseAndFill is the exported parse+LLM-fill entry point used by the HTTP server.
+func (c *Capability) ParseAndFill(sms string) (*agentledger.Entry, error) {
+	return c.parseAndFill(sms)
+}
+
 func (c *Capability) parseAndFill(sms string) (*agentledger.Entry, error) {
 	rule, err := parser.Classify(sms, c.Cfg.ParserRules.Accounts)
 	if err != nil {
