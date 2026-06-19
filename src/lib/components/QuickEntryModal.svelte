@@ -261,10 +261,24 @@
     <div class="tabs is-small mb-0 ml-4" style="align-self: center">
       <ul>
         <li class:is-active={!smsMode}>
-          <a role="button" tabindex="0" on:click={() => { smsMode = false; parseErrorMsg = ""; }}>Manual</a>
+          <a
+            role="button"
+            tabindex="0"
+            on:click={() => {
+              smsMode = false;
+              parseErrorMsg = "";
+            }}>Manual</a
+          >
         </li>
         <li class:is-active={smsMode}>
-          <a role="button" tabindex="0" on:click={() => { smsMode = true; errorMsg = ""; }}>
+          <a
+            role="button"
+            tabindex="0"
+            on:click={() => {
+              smsMode = true;
+              errorMsg = "";
+            }}
+          >
             <span class="icon is-small"><i class="fas fa-robot" /></span>
             <span>Parse SMS</span>
           </a>
@@ -301,7 +315,12 @@
         {#if postError}
           <div class="notification is-danger is-light mb-3 py-2">{postError}</div>
         {/if}
-        <div class="box" style="border: 1px solid {approvalState === 'editing' ? '#3273dc' : '#dbdbdb'}; padding: 1rem;">
+        <div
+          class="box"
+          style="border: 1px solid {approvalState === 'editing'
+            ? '#3273dc'
+            : '#dbdbdb'}; padding: 1rem;"
+        >
           <!-- Description -->
           {#if approvalState === "editing"}
             <input class="input is-small has-text-weight-semibold mb-1" bind:value={chosenDesc} />
@@ -312,14 +331,25 @@
 
           <!-- Amount -->
           {#if approvalState === "editing"}
-            <input class="input is-small is-size-6 has-text-danger has-text-weight-semibold mt-2" bind:value={chosenAmt} style="width: 180px;" />
+            <input
+              class="input is-small is-size-6 has-text-danger has-text-weight-semibold mt-2"
+              bind:value={chosenAmt}
+              style="width: 180px;"
+            />
           {:else}
-            <p class="is-size-4 has-text-danger has-text-weight-semibold mt-2">{chosenAmt || "—"}</p>
+            <p class="is-size-4 has-text-danger has-text-weight-semibold mt-2">
+              {chosenAmt || "—"}
+            </p>
           {/if}
 
           <!-- Source Account -->
           <div class="mt-3 pt-3" style="border-top: 1px solid #ebebeb;">
-            <p class="is-size-7 has-text-grey-light" style="text-transform:uppercase;letter-spacing:.05em;">Source Account</p>
+            <p
+              class="is-size-7 has-text-grey-light"
+              style="text-transform:uppercase;letter-spacing:.05em;"
+            >
+              Source Account
+            </p>
             {#if approvalState === "editing"}
               <Select
                 items={accountOptions}
@@ -329,7 +359,10 @@
                 clearable={false}
                 placeholder="Search accounts…"
                 floatingConfig={{ strategy: "fixed" }}
-                on:change={(e) => { chosenSrc = e.detail?.value ?? ""; editingSrcItem = e.detail ?? null; }}
+                on:change={(e) => {
+                  chosenSrc = e.detail?.value ?? "";
+                  editingSrcItem = e.detail ?? null;
+                }}
               />
             {:else}
               <p class="is-family-monospace is-size-7 mt-1">{chosenSrc || "—"}</p>
@@ -338,7 +371,12 @@
 
           <!-- Destination Account -->
           <div class="mt-3 pt-3" style="border-top: 1px solid #ebebeb;">
-            <p class="is-size-7 has-text-grey-light" style="text-transform:uppercase;letter-spacing:.05em;">Destination Account</p>
+            <p
+              class="is-size-7 has-text-grey-light"
+              style="text-transform:uppercase;letter-spacing:.05em;"
+            >
+              Destination Account
+            </p>
             {#if approvalState === "editing"}
               <Select
                 items={accountOptions}
@@ -348,7 +386,10 @@
                 clearable={false}
                 placeholder="Search accounts…"
                 floatingConfig={{ strategy: "fixed" }}
-                on:change={(e) => { chosenDest = e.detail?.value ?? ""; editingDestItem = e.detail ?? null; }}
+                on:change={(e) => {
+                  chosenDest = e.detail?.value ?? "";
+                  editingDestItem = e.detail ?? null;
+                }}
               />
             {:else}
               <p class="is-family-monospace is-size-7 mt-1">{chosenDest || "—"}</p>
@@ -356,7 +397,12 @@
           </div>
         </div>
         <p class="is-size-7 has-text-grey mt-1" style="text-align:right;">
-          <a role="button" tabindex="0" on:click={resetApproval} on:keydown={(e) => e.key === 'Enter' && resetApproval()}>← paste another message</a>
+          <a
+            role="button"
+            tabindex="0"
+            on:click={resetApproval}
+            on:keydown={(e) => e.key === "Enter" && resetApproval()}>← paste another message</a
+          >
         </p>
       {/if}
     {:else}
@@ -470,16 +516,30 @@
         </button>
         <button
           class="button is-info is-light"
-          on:click={() => { isDuplicate = false; postError = ""; approvalState = "editing"; }}
+          on:click={() => {
+            isDuplicate = false;
+            postError = "";
+            approvalState = "editing";
+          }}
         >
           ✎ Edit
         </button>
         <button class="button" on:click={resetApproval}>✗ Skip</button>
       {:else if approvalState === "editing"}
-        <button class="button is-success" disabled={posting} on:click={() => postTransaction(false)}>
+        <button
+          class="button is-success"
+          disabled={posting}
+          on:click={() => postTransaction(false)}
+        >
           {posting ? "Posting…" : "✓ Post"}
         </button>
-        <button class="button" on:click={() => { initEditFields(); approvalState = "approval"; }}>
+        <button
+          class="button"
+          on:click={() => {
+            initEditFields();
+            approvalState = "approval";
+          }}
+        >
           Cancel
         </button>
       {/if}
