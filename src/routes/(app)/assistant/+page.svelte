@@ -1,6 +1,6 @@
 <script lang="ts">
   import { afterUpdate, tick } from "svelte";
-  import { chatMessages, appendMessage, clearHistory } from "$lib/stores/chat";
+  import { chatMessages, appendMessage, clearHistory, generateId } from "$lib/stores/chat";
   import { theme } from "../../../store";
 
   $: isDark = $theme === "dark";
@@ -22,7 +22,7 @@
     if (!text || loading) return;
     input = "";
 
-    appendMessage({ id: crypto.randomUUID(), role: "user", text, ts: Date.now() });
+    appendMessage({ id: generateId(), role: "user", text, ts: Date.now() });
     loading = true;
     await tick();
 
@@ -44,14 +44,14 @@
         replyText = data.error ?? "⚠️ Something went wrong.";
       }
       appendMessage({
-        id: crypto.randomUUID(),
+        id: generateId(),
         role: "assistant",
         text: replyText,
         ts: Date.now()
       });
     } catch {
       appendMessage({
-        id: crypto.randomUUID(),
+        id: generateId(),
         role: "assistant",
         text: "⚠️ Network error — check your connection.",
         ts: Date.now()
