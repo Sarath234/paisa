@@ -1,6 +1,13 @@
 <script lang="ts">
   import { afterUpdate, tick } from "svelte";
   import { chatMessages, appendMessage, clearHistory } from "$lib/stores/chat";
+  import { theme } from "../../../store";
+
+  $: isDark = $theme === "dark";
+  $: bubbleAssistantBg = isDark ? "hsl(215,18%,20%)" : "#f5f5f5";
+  $: bubbleAssistantColor = isDark ? "hsl(0,0%,90%)" : "#363636";
+  $: sectionBg = isDark ? "hsl(215,18%,13%)" : "transparent";
+  $: borderColor = isDark ? "hsl(215,18%,27%)" : "#ededed";
 
   let input = "";
   let loading = false;
@@ -64,7 +71,7 @@
 
 <section
   class="section"
-  style="height: calc(100vh - 52px); display: flex; flex-direction: column; padding-bottom: 0;"
+  style="height: calc(100vh - 52px); display: flex; flex-direction: column; padding-bottom: 0; background: {sectionBg};"
 >
   <!-- Header -->
   <div class="level mb-3" style="flex-shrink: 0;">
@@ -111,7 +118,7 @@
             word-break: break-word;
             {msg.role === 'user'
             ? 'background: #3273dc; color: white; border-bottom-right-radius: 0.2rem;'
-            : 'background: #f5f5f5; color: #363636; border-bottom-left-radius: 0.2rem;'}
+            : `background: ${bubbleAssistantBg}; color: ${bubbleAssistantColor}; border-bottom-left-radius: 0.2rem;`}
           "
         >
           {msg.text}
@@ -121,7 +128,7 @@
     {#if loading}
       <div style="display: flex; justify-content: flex-start;">
         <div
-          style="background: #f5f5f5; border-radius: 1rem; padding: 0.5rem 0.85rem; color: #aaa; font-size: 0.85rem;"
+          style="background: {bubbleAssistantBg}; border-radius: 1rem; padding: 0.5rem 0.85rem; color: #aaa; font-size: 0.85rem;"
         >
           ···
         </div>
@@ -132,7 +139,7 @@
   <!-- Input bar -->
   <div
     class="field has-addons mb-0"
-    style="flex-shrink: 0; padding: 0.75rem 0; border-top: 1px solid #ededed;"
+    style="flex-shrink: 0; padding: 0.75rem 0; border-top: 1px solid {borderColor};"
   >
     <div class="control is-expanded">
       <input

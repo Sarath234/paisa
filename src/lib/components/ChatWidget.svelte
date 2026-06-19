@@ -1,6 +1,9 @@
 <script lang="ts">
   import { afterUpdate, tick } from "svelte";
   import { chatMessages, appendMessage, type ChatMessage } from "$lib/stores/chat";
+  import { theme } from "../../store";
+
+  $: isDark = $theme === "dark";
 
   let open = false;
   let input = "";
@@ -73,7 +76,7 @@
 
 <!-- Popup bubble -->
 {#if open}
-  <div class="chat-popup">
+  <div class="chat-popup" class:dark={isDark}>
     <!-- Header -->
     <div class="chat-popup-header">
       <span class="has-text-weight-semibold">💬 Assistant</span>
@@ -231,4 +234,18 @@
   }
   .chat-input-row .input { border-radius: 1rem; }
   .chat-input-row .button { border-radius: 1rem; }
+
+  /* dark theme overrides */
+  .chat-popup.dark {
+    background: hsl(215, 18%, 13%);
+    border-color: hsl(215, 18%, 27%);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  }
+  .chat-popup.dark .chat-thread { background: hsl(215, 18%, 13%); }
+  .chat-popup.dark .chat-bubble-assistant {
+    background: hsl(215, 18%, 20%);
+    color: hsl(0, 0%, 90%);
+  }
+  .chat-popup.dark .chat-hint { color: hsl(0, 0%, 48%); }
+  .chat-popup.dark .chat-input-row { border-top-color: hsl(215, 18%, 27%); }
 </style>
