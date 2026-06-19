@@ -7,6 +7,7 @@
   import Navbar from "$lib/components/Navbar.svelte";
   import QuickEntryModal from "$lib/components/QuickEntryModal.svelte";
   import SearchModal from "$lib/components/SearchModal.svelte";
+  import ChatWidget from "$lib/components/ChatWidget.svelte";
   import { willClearTippy, willRefresh } from "../../store";
 
   let quickEntryActive = false;
@@ -83,6 +84,7 @@
 
 <QuickEntryModal bind:active={quickEntryActive} />
 <SearchModal bind:active={searchActive} />
+<ChatWidget />
 
 {#key $willRefresh}
   <Navbar
