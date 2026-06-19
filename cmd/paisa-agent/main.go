@@ -2,8 +2,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/ananthakumaran/paisa/internal/agent/approval"
@@ -30,6 +32,8 @@ func main() {
 
 	bot := telegram.NewBot(cfg.Telegram.BotToken, cfg.Telegram.ChatID)
 	store := approval.NewStore()
+
+	go serveHTTP(cfg)
 
 	log.Infof("paisa-agent started — polling Telegram (chat_id=%d)", cfg.Telegram.ChatID)
 
@@ -167,5 +171,78 @@ func handleCallback(cb *telegram.CallbackQuery, bot *telegram.Bot, store *approv
 	case "skip":
 		bot.EditMessage(msgID, "⏭ Skipped\n\n"+telegram.FormatDraft(pending.Entry))
 		store.Delete(msgID)
+	}
+}
+
+func serveHTTP(cfg *config.Config) {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/parse", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Text string `json:"text"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
+			return
+		}
+		entry, err := parseAndFill(req.Text, cfg)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(entry)
+	})
+
+	mux.HandleFunc("/post", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Entry agentledger.Entry `json:"entry"`
+			Dest  string            `json:"dest"`
+			Force bool              `json:"force"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
+			return
+		}
+		entry := req.Entry
+		if req.Dest != "" {
+			entry.Dest = req.Dest
+		}
+		if !req.Force {
+			dup, err := agentledger.IsDuplicate(cfg.Paisa.JournalDir, &entry)
+			if err != nil {
+				log.Warnf("http /post: duplicate check: %v", err)
+			}
+			if dup {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]string{"status": "duplicate"})
+				return
+			}
+		}
+		if err := agentledger.Append(cfg.Paisa.JournalDir, &entry); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		log.Infof("http /post: posted %s %s %s", entry.Date, entry.Desc, entry.Amt)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "posted"})
+	})
+
+	addr := "127.0.0.1:7501"
+	log.Infof("paisa-agent HTTP listening on %s", addr)
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		log.Fatalf("http server: %v", err)
 	}
 }
