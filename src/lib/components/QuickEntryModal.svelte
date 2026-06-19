@@ -51,7 +51,12 @@
   type ApprovalState = "idle" | "approval" | "editing";
   let approvalState: ApprovalState = "idle";
   let parsedEntry: Entry | null = null;
+  // editable copies of the four fields
+  let chosenDesc = "";
+  let chosenAmt = "";
+  let chosenSrc = "";
   let chosenDest = "";
+  let editingSrcItem: { value: string; label: string } | null = null;
   let editingDestItem: { value: string; label: string } | null = null;
   let isDuplicate = false;
   let postError = "";
@@ -154,11 +159,24 @@
   function resetApproval() {
     approvalState = "idle";
     parsedEntry = null;
+    chosenDesc = "";
+    chosenAmt = "";
+    chosenSrc = "";
     chosenDest = "";
+    editingSrcItem = null;
     editingDestItem = null;
     isDuplicate = false;
     postError = "";
     smsText = "";
+  }
+
+  function initEditFields() {
+    chosenDesc = parsedEntry?.desc ?? "";
+    chosenAmt = parsedEntry?.amt ?? "";
+    chosenSrc = parsedEntry?.src ?? "";
+    chosenDest = parsedEntry?.dest ?? "";
+    editingSrcItem = chosenSrc ? { value: chosenSrc, label: chosenSrc } : null;
+    editingDestItem = chosenDest ? { value: chosenDest, label: chosenDest } : null;
   }
 
   async function parseSMS() {
@@ -175,8 +193,7 @@
         return;
       }
       parsedEntry = result as Entry;
-      chosenDest = parsedEntry?.dest ?? "";
-      editingDestItem = chosenDest ? { value: chosenDest, label: chosenDest } : null;
+      initEditFields();
       approvalState = "approval";
     } catch (e: any) {
       parseErrorMsg = e?.message || "Failed to parse";
@@ -190,9 +207,16 @@
     posting = true;
     postError = "";
     try {
+      const entry: Entry = {
+        date: parsedEntry!.date,
+        desc: chosenDesc,
+        amt: chosenAmt,
+        src: chosenSrc,
+        dest: chosenDest
+      };
       const result = await ajax("/api/agent/post", {
         method: "POST",
-        body: JSON.stringify({ entry: parsedEntry, dest: chosenDest, force })
+        body: JSON.stringify({ entry, force })
       });
       if (result.error) {
         postError = result.error;
@@ -278,15 +302,41 @@
           <div class="notification is-danger is-light mb-3 py-2">{postError}</div>
         {/if}
         <div class="box" style="border: 1px solid {approvalState === 'editing' ? '#3273dc' : '#dbdbdb'}; padding: 1rem;">
-          <p class="has-text-weight-semibold">{parsedEntry?.desc ?? "—"}</p>
+          <!-- Description -->
+          {#if approvalState === "editing"}
+            <input class="input is-small has-text-weight-semibold mb-1" bind:value={chosenDesc} />
+          {:else}
+            <p class="has-text-weight-semibold">{chosenDesc || "—"}</p>
+          {/if}
           <p class="is-size-7 has-text-grey">{parsedEntry?.date ?? ""}</p>
-          <p class="is-size-4 has-text-danger has-text-weight-semibold mt-2">
-            {parsedEntry?.amt ?? "—"}
-          </p>
+
+          <!-- Amount -->
+          {#if approvalState === "editing"}
+            <input class="input is-small is-size-6 has-text-danger has-text-weight-semibold mt-2" bind:value={chosenAmt} style="width: 180px;" />
+          {:else}
+            <p class="is-size-4 has-text-danger has-text-weight-semibold mt-2">{chosenAmt || "—"}</p>
+          {/if}
+
+          <!-- Source Account -->
           <div class="mt-3 pt-3" style="border-top: 1px solid #ebebeb;">
             <p class="is-size-7 has-text-grey-light" style="text-transform:uppercase;letter-spacing:.05em;">Source Account</p>
-            <p class="is-family-monospace is-size-7 mt-1">{parsedEntry?.src ?? "—"}</p>
+            {#if approvalState === "editing"}
+              <Select
+                items={accountOptions}
+                bind:value={editingSrcItem}
+                showChevron={true}
+                searchable={true}
+                clearable={false}
+                placeholder="Search accounts…"
+                floatingConfig={{ strategy: "fixed" }}
+                on:change={(e) => { chosenSrc = e.detail?.value ?? ""; editingSrcItem = e.detail ?? null; }}
+              />
+            {:else}
+              <p class="is-family-monospace is-size-7 mt-1">{chosenSrc || "—"}</p>
+            {/if}
           </div>
+
+          <!-- Destination Account -->
           <div class="mt-3 pt-3" style="border-top: 1px solid #ebebeb;">
             <p class="is-size-7 has-text-grey-light" style="text-transform:uppercase;letter-spacing:.05em;">Destination Account</p>
             {#if approvalState === "editing"}
@@ -298,10 +348,7 @@
                 clearable={false}
                 placeholder="Search accounts…"
                 floatingConfig={{ strategy: "fixed" }}
-                on:change={(e) => {
-                  chosenDest = e.detail?.value ?? "";
-                  editingDestItem = e.detail ?? null;
-                }}
+                on:change={(e) => { chosenDest = e.detail?.value ?? ""; editingDestItem = e.detail ?? null; }}
               />
             {:else}
               <p class="is-family-monospace is-size-7 mt-1">{chosenDest || "—"}</p>
@@ -432,7 +479,7 @@
         <button class="button is-success" disabled={posting} on:click={() => postTransaction(false)}>
           {posting ? "Posting…" : "✓ Post"}
         </button>
-        <button class="button" on:click={() => { chosenDest = parsedEntry?.dest ?? ""; editingDestItem = chosenDest ? { value: chosenDest, label: chosenDest } : null; approvalState = "approval"; }}>
+        <button class="button" on:click={() => { initEditFields(); approvalState = "approval"; }}>
           Cancel
         </button>
       {/if}

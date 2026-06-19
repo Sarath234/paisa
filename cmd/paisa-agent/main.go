@@ -207,7 +207,6 @@ func serveHTTP(cfg *config.Config) {
 		}
 		var req struct {
 			Entry agentledger.Entry `json:"entry"`
-			Dest  string            `json:"dest"`
 			Force bool              `json:"force"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -215,9 +214,6 @@ func serveHTTP(cfg *config.Config) {
 			return
 		}
 		entry := req.Entry
-		if req.Dest != "" {
-			entry.Dest = req.Dest
-		}
 		if !req.Force {
 			dup, err := agentledger.IsDuplicate(cfg.Paisa.JournalDir, &entry)
 			if err != nil {
