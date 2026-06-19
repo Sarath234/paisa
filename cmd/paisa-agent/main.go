@@ -126,7 +126,7 @@ func main() {
 		},
 	)
 
-	go serveHTTP(cfg, smsCap)
+	go serveHTTP(cfg, smsCap, qaCap.Answerer)
 
 	log.Infof("paisa-agent started — polling Telegram (chat_id=%d)", cfg.Telegram.ChatID)
 
@@ -400,7 +400,7 @@ func handleStatementEmail(
 	}
 }
 
-func serveHTTP(cfg *config.Config, smsCap *sms.Capability) {
+func serveHTTP(cfg *config.Config, smsCap *sms.Capability, answerer *qa.Answerer) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/parse", func(w http.ResponseWriter, r *http.Request) {
@@ -461,6 +461,36 @@ func serveHTTP(cfg *config.Config, smsCap *sms.Capability) {
 		log.Infof("http /post: posted %s %s %s", entry.Date, entry.Desc, entry.Amt)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "posted"})
+	})
+
+	mux.HandleFunc("/chat", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Message string `json:"message"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
+			return
+		}
+		q, err := qa.Extract(req.Message, cfg.Ollama)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		answer, err := answerer.Answer(q)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"reply": answer})
 	})
 
 	addr := "127.0.0.1:7501"
