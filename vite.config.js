@@ -1,5 +1,6 @@
 import { sveltekit } from "@sveltejs/kit/vite";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
+import { resolve } from "path";
 
 /** @type {import('vite').UserConfig} */
 const config = {
@@ -7,13 +8,12 @@ const config = {
     target: 'es2021'
   },
   resolve: {
-    conditions: ["svelte"]
+    alias: {
+      "svelte-file-dropzone": resolve("./node_modules/svelte-file-dropzone/dist/index.js")
+    }
   },
   optimizeDeps: {
     exclude: ["svelte-file-dropzone"]
-  },
-  ssr: {
-    noExternal: ["svelte-file-dropzone"]
   },
   plugins: [
     sveltekit(),
