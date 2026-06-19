@@ -13,7 +13,7 @@ const storeFile = "reconciliation.json"
 
 // Record is one reconciliation result, keyed by account+period.
 type Record struct {
-	Period      string    `json:"period"`       // "YYYY-MM"
+	Period      string    `json:"period"` // "YYYY-MM"
 	GeneratedAt time.Time `json:"generated_at"`
 	Diff        Diff      `json:"diff"`
 }

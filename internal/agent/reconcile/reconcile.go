@@ -17,12 +17,12 @@ type LedgerEntry struct {
 
 // Diff is the result of comparing a statement against the ledger.
 type Diff struct {
-	Account        string                    `json:"account"`
-	Month          int                       `json:"month"` // 1-12
-	Year           int                       `json:"year"`
-	StatementClose float64                   `json:"statement_close"`
-	Missing        []statement.Transaction   `json:"missing"` // in statement, not in ledger
-	Extra          []LedgerEntry             `json:"extra"`   // in ledger, not in statement
+	Account        string                  `json:"account"`
+	Month          int                     `json:"month"` // 1-12
+	Year           int                     `json:"year"`
+	StatementClose float64                 `json:"statement_close"`
+	Missing        []statement.Transaction `json:"missing"` // in statement, not in ledger
+	Extra          []LedgerEntry           `json:"extra"`   // in ledger, not in statement
 }
 
 const amountEpsilon = 0.01

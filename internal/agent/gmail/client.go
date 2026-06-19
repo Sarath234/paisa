@@ -151,7 +151,7 @@ func OAuthCallbackServer() (string, error) {
 		fmt.Fprintln(w, "Gmail authorised — you can close this tab.")
 		codeCh <- code
 	})
-	go srv.ListenAndServe() //nolint:errcheck
+	go srv.ListenAndServe()                  //nolint:errcheck
 	defer srv.Shutdown(context.Background()) //nolint:errcheck
 
 	select {
