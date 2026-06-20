@@ -212,6 +212,19 @@
         <Logo size={22} /><span class="ml-1 is-primary-color">Paisa</span>
       {/if}
     </a>
+    <!-- Mobile-only quick actions (always visible, no burger needed) -->
+    <div class="navbar-item is-hidden-tablet ml-auto mobile-quick-actions">
+      {#if !readonly}
+        <button
+          class="button is-small is-rounded mr-1"
+          data-tippy-content="<p>Add transaction (N)</p>"
+          on:click={() => dispatch("quickentry")}
+        >
+          <span class="icon is-small"><i class="fas fa-plus" /></span>
+        </button>
+      {/if}
+      <ThemeSwitcher />
+    </div>
     <a
       role="button"
       tabindex="-1"
@@ -469,5 +482,12 @@
 <style lang="scss">
   li a span.icon {
     margin-top: -5px;
+  }
+
+  .mobile-quick-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0.25rem 0.5rem;
   }
 </style>
