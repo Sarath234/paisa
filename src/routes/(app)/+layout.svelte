@@ -9,6 +9,7 @@
   import SearchModal from "$lib/components/SearchModal.svelte";
   import ChatWidget from "$lib/components/ChatWidget.svelte";
   import A2HSBanner from "$lib/components/A2HSBanner.svelte";
+  import NotificationBanner from "$lib/components/NotificationBanner.svelte";
   import { willClearTippy, willRefresh } from "../../store";
   import { useRegisterSW } from "virtual:pwa-register/svelte";
   import { toast } from "bulma-toast";
@@ -114,6 +115,7 @@
 <SearchModal bind:active={searchActive} />
 <ChatWidget />
 <A2HSBanner />
+<NotificationBanner />
 
 {#key $willRefresh}
   <Navbar
