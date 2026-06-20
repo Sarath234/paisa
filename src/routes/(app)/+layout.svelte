@@ -8,6 +8,7 @@
   import QuickEntryModal from "$lib/components/QuickEntryModal.svelte";
   import SearchModal from "$lib/components/SearchModal.svelte";
   import ChatWidget from "$lib/components/ChatWidget.svelte";
+  import A2HSBanner from "$lib/components/A2HSBanner.svelte";
   import { willClearTippy, willRefresh } from "../../store";
   import { useRegisterSW } from "virtual:pwa-register/svelte";
   import { toast } from "bulma-toast";
@@ -112,6 +113,7 @@
 <QuickEntryModal bind:active={quickEntryActive} />
 <SearchModal bind:active={searchActive} />
 <ChatWidget />
+<A2HSBanner />
 
 {#key $willRefresh}
   <Navbar
