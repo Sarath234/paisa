@@ -34,11 +34,12 @@
         applicationServerKey: urlBase64ToUint8Array(publicKey)
       });
 
-      await fetch('/api/push/subscribe', {
+      const subRes = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(subscription.toJSON())
       });
+      if (!subRes.ok) throw new Error(`subscribe failed: ${subRes.status}`);
 
       dismiss();
     } catch (err) {
@@ -61,7 +62,7 @@
 </script>
 
 {#if show}
-  <div class="notification is-warning is-light push-banner">
+  <div class="notification is-warning is-light push-banner" role="alert">
     <button class="delete" on:click={dismiss} aria-label="Dismiss"></button>
     <span>Get notified when your budget is overspent.</span>
     <button class="button is-small is-warning ml-2" on:click={requestPermission}>
