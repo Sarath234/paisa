@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/SherClockHolmes/webpush-go"
 	log "github.com/sirupsen/logrus"
 )
+
+var pushMu sync.Mutex
 
 type vapidKeys struct {
 	Public  string `json:"public"`
@@ -44,6 +47,9 @@ func LoadVAPIDKeys(dir string) (publicKey, privateKey string, err error) {
 
 // SaveSubscription saves a push subscription, deduplicating by endpoint.
 func SaveSubscription(dir string, sub *webpush.Subscription) error {
+	pushMu.Lock()
+	defer pushMu.Unlock()
+
 	subs, err := LoadSubscriptions(dir)
 	if err != nil {
 		subs = []webpush.Subscription{}
@@ -82,7 +88,9 @@ func LoadSubscriptions(dir string) ([]webpush.Subscription, error) {
 // SendPushNotification sends a notification to all stored subscriptions,
 // removing expired ones (404/410 responses).
 func SendPushNotification(dir, publicKey, privateKey, title, body string) {
+	pushMu.Lock()
 	subs, err := LoadSubscriptions(dir)
+	pushMu.Unlock()
 	if err != nil || len(subs) == 0 {
 		return
 	}
@@ -93,10 +101,10 @@ func SendPushNotification(dir, publicKey, privateKey, title, body string) {
 	for _, sub := range subs {
 		s := sub
 		resp, err := webpush.SendNotification(payload, &s, &webpush.Options{
-			Subscriber:      "mailto:paisa@localhost",
+			Subscriber:      "mailto:paisa@paisa.app",
 			VAPIDPublicKey:  publicKey,
 			VAPIDPrivateKey: privateKey,
-			TTL:             30,
+			TTL:             86400,
 		})
 		if err != nil {
 			log.Warnf("push: send error for %s: %v", sub.Endpoint, err)
@@ -111,7 +119,9 @@ func SendPushNotification(dir, publicKey, privateKey, title, body string) {
 		}
 	}
 
+	pushMu.Lock()
 	store := pushStore{Subscriptions: active}
 	data, _ := json.Marshal(store)
 	_ = os.WriteFile(filepath.Join(dir, "push_subscriptions.json"), data, 0600)
+	pushMu.Unlock()
 }

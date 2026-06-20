@@ -17,7 +17,13 @@ const config = {
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['pwa-assets/icon-192.png', 'pwa-assets/icon-512.png'],
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}']
+      },
+      includeAssets: ['pwa-assets/icon-192.png', 'pwa-assets/icon-512.png', 'pwa-assets/maskable-icon-512x512.png'],
       manifest: {
         name: 'Paisa',
         short_name: 'Paisa',
@@ -41,25 +47,10 @@ const config = {
             purpose: 'any'
           },
           {
-            src: '/pwa-assets/icon-512.png',
+            src: '/pwa-assets/maskable-icon-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable'
-          }
-        ]
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/api/'),
-            handler: 'NetworkFirst',
-            options: {
-              networkTimeoutSeconds: 3,
-              cacheName: 'api-cache',
-              cacheableResponse: { statuses: [200] },
-              expiration: { maxEntries: 50, maxAgeSeconds: 86400 }
-            }
           }
         ]
       }
