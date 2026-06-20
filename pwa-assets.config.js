@@ -6,6 +6,6 @@ export default defineConfig({
     maskable: minimalPreset.maskable,
     apple: { sizes: [] },
   },
-  images: ['src/lib/assets/paisa-icon.svg'],
+  images: ['static/pwa-assets/paisa-icon.svg'],
   outDir: 'static/pwa-assets'
 })
