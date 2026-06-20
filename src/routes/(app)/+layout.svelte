@@ -8,6 +8,7 @@
   import QuickEntryModal from "$lib/components/QuickEntryModal.svelte";
   import SearchModal from "$lib/components/SearchModal.svelte";
   import ChatWidget from "$lib/components/ChatWidget.svelte";
+  import PwaRegister from "$lib/components/PwaRegister.svelte";
   import A2HSBanner from "$lib/components/A2HSBanner.svelte";
   import NotificationBanner from "$lib/components/NotificationBanner.svelte";
   import { willClearTippy, willRefresh } from "../../store";
@@ -91,6 +92,7 @@
 <QuickEntryModal bind:active={quickEntryActive} />
 <SearchModal bind:active={searchActive} />
 <ChatWidget />
+<PwaRegister />
 <A2HSBanner />
 <NotificationBanner />
 
