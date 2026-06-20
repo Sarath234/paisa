@@ -17,6 +17,7 @@ import (
 	"github.com/ananthakumaran/paisa/internal/server/assets"
 	"github.com/ananthakumaran/paisa/internal/server/goal"
 	"github.com/ananthakumaran/paisa/internal/server/liabilities"
+	"github.com/ananthakumaran/paisa/internal/service"
 	"github.com/ananthakumaran/paisa/internal/utils"
 	"github.com/ananthakumaran/paisa/web"
 
@@ -30,6 +31,14 @@ import (
 
 func Build(db *gorm.DB, enableCompression bool) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
+
+	// Load or generate VAPID keys for push notifications
+	vapidDir := config.GetConfigDir()
+	vapidPublicKey, vapidPrivateKey, vapidErr := service.LoadVAPIDKeys(vapidDir)
+	if vapidErr != nil {
+		log.Warnf("push: could not load VAPID keys: %v", vapidErr)
+		vapidPublicKey, vapidPrivateKey = "", ""
+	}
 
 	router := gin.New()
 	if enableCompression {
@@ -390,6 +399,9 @@ func Build(db *gorm.DB, enableCompression bool) *gin.Engine {
 	router.POST("/api/agent/chat", func(c *gin.Context) {
 		ChatWithAgent(c)
 	})
+
+	router.GET("/api/push/public-key", GetPushPublicKey(vapidPublicKey))
+	router.POST("/api/push/subscribe", PostPushSubscribe(vapidDir, vapidPublicKey, vapidPrivateKey))
 
 	router.NoRoute(func(c *gin.Context) {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(web.Index))
