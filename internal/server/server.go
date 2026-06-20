@@ -115,7 +115,37 @@ func Build(db *gorm.DB, enableCompression bool) *gin.Engine {
 			return
 		}
 
-		c.JSON(200, Sync(db, syncRequest))
+		result := Sync(db, syncRequest)
+
+		// After sync, check for budget overspend and notify subscribed devices
+		if vapidPublicKey != "" {
+			go func() {
+				budgetData := GetBudget(db)
+				if raw, ok := budgetData["budgetsByMonth"]; ok {
+					if budgetsByMonth, ok := raw.(map[string]Budget); ok {
+						currentMonth := utils.Now().Format("2006-01")
+						if budget, ok := budgetsByMonth[currentMonth]; ok {
+							for _, acct := range budget.Accounts {
+								if acct.Available.IsNegative() {
+									label := acct.Account
+									if idx := strings.LastIndex(label, ":"); idx >= 0 {
+										label = label[idx+1:]
+									}
+									service.SendPushNotification(
+										vapidDir, vapidPublicKey, vapidPrivateKey,
+										"Budget Alert",
+										label+" is overspent by "+acct.Available.Neg().StringFixed(0),
+									)
+									break // one notification per sync
+								}
+							}
+						}
+					}
+				}
+			}()
+		}
+
+		c.JSON(200, result)
 	})
 
 	router.GET("/api/dashboard", func(c *gin.Context) {
