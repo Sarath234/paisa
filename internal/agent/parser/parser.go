@@ -11,35 +11,29 @@ import (
 )
 
 // Classify scans the accounts list top-to-bottom and returns the first rule
-// where ALL identifiers appear in the SMS. Fixed routes win because they are
-// listed first in the YAML.
+// where ANY identifier appears in the SMS (OR match). Fixed routes win because
+// they are listed first in the YAML.
 func Classify(sms string, accounts []config.AccountRule) (*config.AccountRule, error) {
 	log.Debugf("classify: checking %d account rules", len(accounts))
 	for i, rule := range accounts {
-		missing := missingIdentifiers(sms, rule.Identifiers)
-		if len(missing) == 0 {
+		if matchesAny(sms, rule.Identifiers) {
 			log.Infof("classify: matched rule bank=%q destinations=%q", rule.Bank, rule.Destinations)
 			return &accounts[i], nil
 		}
-		log.Debugf("classify: rule bank=%q skipped — missing identifiers: %v", rule.Bank, missing)
+		log.Debugf("classify: rule bank=%q skipped — no identifier matched", rule.Bank)
 	}
 	log.Warnf("classify: no rule matched (SMS length=%d)", len(sms))
 	return nil, fmt.Errorf("no matching account rule for SMS")
 }
 
-// missingIdentifiers returns which identifiers from the rule are absent in the SMS.
-func missingIdentifiers(sms string, identifiers []string) []string {
-	var missing []string
+// matchesAny returns true if any identifier from the rule is found in the SMS.
+func matchesAny(sms string, identifiers []string) bool {
 	for _, id := range identifiers {
-		if !strings.Contains(sms, id) {
-			missing = append(missing, id)
+		if strings.Contains(sms, id) {
+			return true
 		}
 	}
-	return missing
-}
-
-func matchesAll(sms string, identifiers []string) bool {
-	return len(missingIdentifiers(sms, identifiers)) == 0
+	return false
 }
 
 // Parse builds a ledger Entry from an SMS given the matched AccountRule.

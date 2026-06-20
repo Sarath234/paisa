@@ -10,10 +10,10 @@ import (
 )
 
 var testAccounts = []config.AccountRule{
-	// Fixed routes first
-	{Bank: "fixed", Identifiers: []string{"CRD-PMNT", "8860"}, Src: "Assets:Checking:AXIS6386", Destinations: "Liabilities:CreditCard:FK8860", Description: "CC Payment"},
-	{Bank: "fixed", Identifiers: []string{"CRD-PMNT", "1610"}, Src: "Assets:Checking:AXIS6386", Destinations: "Liabilities:CreditCard:MyZone1610", Description: "CC Payment"},
-	{Bank: "fixed", Identifiers: []string{"CRD-PMNT", "6792"}, Src: "Assets:Checking:AXIS6386", Destinations: "Liabilities:CreditCard:SELECT6792", Description: "CC Payment"},
+	// Fixed routes first — each identifier is unique enough on its own (OR match)
+	{Bank: "fixed", Identifiers: []string{"****8860"}, Src: "Assets:Checking:AXIS6386", Destinations: "Liabilities:CreditCard:FK8860", Description: "CC Payment"},
+	{Bank: "fixed", Identifiers: []string{"****1610"}, Src: "Assets:Checking:AXIS6386", Destinations: "Liabilities:CreditCard:MyZone1610", Description: "CC Payment"},
+	{Bank: "fixed", Identifiers: []string{"****6792"}, Src: "Assets:Checking:AXIS6386", Destinations: "Liabilities:CreditCard:SELECT6792", Description: "CC Payment"},
 	{Bank: "fixed", Identifiers: []string{"has been received on your ICICI Bank Credit Card XX6009"}, Src: "Assets:Checking:AXIS6386", Destinations: "Liabilities:CreditCard:ICIC6009", Description: "CC Payment"},
 	{Bank: "fixed", Identifiers: []string{"KONDAVEET"}, Src: "Assets:Checking:AXISHARITHA", Destinations: "Assets:Checking:AXIS6386", Description: "Rent from Haritha"},
 	// Format routes
