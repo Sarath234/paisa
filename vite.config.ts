@@ -15,8 +15,8 @@ const config = {
       }
     }),
     VitePWA({
-      registerType: 'prompt',
-      injectRegister: null,
+      registerType: 'autoUpdate',
+      injectRegister: 'auto',
       includeAssets: ['pwa-assets/icon-192.png', 'pwa-assets/icon-512.png'],
       manifest: {
         name: 'Paisa',

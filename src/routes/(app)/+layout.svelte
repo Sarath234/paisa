@@ -11,38 +11,15 @@
   import A2HSBanner from "$lib/components/A2HSBanner.svelte";
   import NotificationBanner from "$lib/components/NotificationBanner.svelte";
   import { willClearTippy, willRefresh } from "../../store";
-  import { useRegisterSW } from "virtual:pwa-register/svelte";
-  import { toast } from "bulma-toast";
 
   let quickEntryActive = false;
   let searchActive = false;
 
   let isBurger: boolean = null;
 
-  // Register service worker and show update toast
-  const { needRefresh, updateServiceWorker } = useRegisterSW({
-    onRegistered(r) {
-      // SW registered — no action needed
-    },
-    onRegisterError(error) {
-      console.warn('SW registration failed:', error);
-    }
-  });
-
-  const unsubNeedRefresh = needRefresh.subscribe((yes) => {
-    if (yes) {
-      toast({
-        message: 'Update available — <a onclick="window.location.reload()">reload</a>',
-        type: 'is-info',
-        dismissible: true,
-        pauseOnHover: true,
-        duration: 0,
-        position: 'bottom-right'
-      });
-    }
-  });
-
-  onDestroy(unsubNeedRefresh);
+  // Service worker registration happens in a dedicated client-only component
+  // (PwaRegister.svelte) to avoid importing virtual:pwa-register/svelte at the
+  // module level, which Rollup cannot resolve during SvelteKit's SSR pass.
 
   function clearTippy() {
     hideAll();
