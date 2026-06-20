@@ -31,30 +31,34 @@ const config = {
           {
             src: '/pwa-assets/icon-192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
             src: '/pwa-assets/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
+          },
+          {
+            src: '/pwa-assets/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
           }
         ]
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        globIgnores: [
-          '**/roboto-flex*',
-          '**/roboto-mono*'
-        ],
         runtimeCaching: [
           {
-            urlPattern: /^\/api\/.*/,
+            urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/api/'),
             handler: 'NetworkFirst',
             options: {
-              networkTimeoutSeconds: 10,
+              networkTimeoutSeconds: 3,
               cacheName: 'api-cache',
-              cacheableResponse: { statuses: [200] }
+              cacheableResponse: { statuses: [200] },
+              expiration: { maxEntries: 50, maxAgeSeconds: 86400 }
             }
           }
         ]
