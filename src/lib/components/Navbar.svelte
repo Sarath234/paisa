@@ -213,10 +213,11 @@
       {/if}
     </a>
     <!-- Mobile-only quick actions (always visible, no burger needed) -->
-    <div class="navbar-item is-hidden-tablet ml-auto mobile-quick-actions">
+    <div class="navbar-item is-hidden-tablet mobile-quick-actions">
       {#if !readonly}
         <button
-          class="button is-small is-rounded mr-1"
+          class="button is-small is-rounded"
+          aria-label="Add transaction"
           data-tippy-content="<p>Add transaction (N)</p>"
           on:click={() => dispatch("quickentry")}
         >
