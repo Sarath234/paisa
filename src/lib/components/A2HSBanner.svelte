@@ -1,11 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
+  interface BeforeInstallPromptEvent extends Event {
+    prompt(): Promise<void>;
+    readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+  }
+
   const STORAGE_KEY = 'a2hs_dismissed';
 
   let show = false;
   let isIOS = false;
-  let deferredPrompt: any = null;
+  let deferredPrompt: BeforeInstallPromptEvent | null = null;
 
   onMount(() => {
     if (localStorage.getItem(STORAGE_KEY)) return;
@@ -22,11 +27,13 @@
       return;
     }
 
-    window.addEventListener('beforeinstallprompt', (e: Event) => {
+    const handler = (e: Event) => {
       e.preventDefault();
-      deferredPrompt = e;
+      deferredPrompt = e as unknown as BeforeInstallPromptEvent;
       show = true;
-    });
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   });
 
   async function install() {
@@ -34,9 +41,7 @@
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       deferredPrompt = null;
-      if (outcome === 'accepted') {
-        dismiss();
-      }
+      dismiss(); // hide banner regardless of outcome
     }
   }
 
