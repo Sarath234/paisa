@@ -1,6 +1,6 @@
 <script lang="ts">
   import { afterNavigate, beforeNavigate } from "$app/navigation";
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { followCursor, delegate, hideAll } from "tippy.js";
   import _ from "lodash";
   import Spinner from "$lib/components/Spinner.svelte";
@@ -9,11 +9,38 @@
   import SearchModal from "$lib/components/SearchModal.svelte";
   import ChatWidget from "$lib/components/ChatWidget.svelte";
   import { willClearTippy, willRefresh } from "../../store";
+  import { useRegisterSW } from "virtual:pwa-register/svelte";
+  import { toast } from "bulma-toast";
 
   let quickEntryActive = false;
   let searchActive = false;
 
   let isBurger: boolean = null;
+
+  // Register service worker and show update toast
+  const { needRefresh, updateServiceWorker } = useRegisterSW({
+    onRegistered(r) {
+      // SW registered — no action needed
+    },
+    onRegisterError(error) {
+      console.warn('SW registration failed:', error);
+    }
+  });
+
+  const unsubNeedRefresh = needRefresh.subscribe((yes) => {
+    if (yes) {
+      toast({
+        message: 'Update available — <a onclick="window.location.reload()">reload</a>',
+        type: 'is-info',
+        dismissible: true,
+        pauseOnHover: true,
+        duration: 0,
+        position: 'bottom-right'
+      });
+    }
+  });
+
+  onDestroy(unsubNeedRefresh);
 
   function clearTippy() {
     hideAll();
