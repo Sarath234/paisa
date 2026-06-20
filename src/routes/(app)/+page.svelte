@@ -37,6 +37,8 @@
 
   let UntypedMasonryGrid = MasonryGrid as any;
 
+  let cashFlowChartHeight = typeof window !== "undefined" && window.innerWidth < 769 ? 180 : 250;
+
   let cashflowLegends: Legend[] = [];
   let month = now().format("YYYY-MM");
   let goalSummaries: GoalSummary[] = [];
@@ -346,7 +348,7 @@
               <svg
                 class:is-not-visible={_.isEmpty(cashFlows)}
                 id="d3-current-cash-flow"
-                height="250"
+                height={cashFlowChartHeight}
                 width="100%"
               />
             </div>

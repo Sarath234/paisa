@@ -22,21 +22,12 @@
       }
     }
 
-    // ── Dashboard tiles: force full-width stacking ────────────────────────────
-    // Bulma's .is-4 sets width: 33.33% at all breakpoints.
-    // We override it so the left and right tile columns each fill the viewport.
-    .tile.is-ancestor > .tile {
-      width: 100% !important;
-      flex: none !important;
-      display: block;
-    }
-
     // ── Secondary control bar: allow wrapping ─────────────────────────────────
     // The breadcrumb + date/month picker row uses is-flex / space-between.
     // On narrow screens let it wrap to a second line.
     .mt-3.px-3.is-flex {
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 0.5rem;
     }
 
     // ── Data tables: horizontal scroll instead of viewport push ───────────────
@@ -44,13 +35,10 @@
       overflow-x: auto;
     }
 
-    // ── D3 charts: cap height on mobile ──────────────────────────────────────
-    #d3-current-cash-flow {
-      max-height: 180px;
-    }
-
-    // ── Touch targets: minimum 44px for small buttons ─────────────────────────
-    .button.is-small {
+    // ── Touch targets: minimum 44px for navbar/quick-action small buttons ──────
+    // Scoped to avoid inflating MonthPicker and editor toolbar buttons.
+    .navbar-end .button.is-small,
+    .mobile-quick-actions .button.is-small {
       min-height: 44px;
       padding-left: 0.75rem;
       padding-right: 0.75rem;
@@ -59,7 +47,7 @@
     // ── Navbar end: give icon buttons breathing room when burger is open ──────
     .navbar-end .field.is-grouped {
       flex-wrap: wrap;
-      gap: 4px;
+      gap: 0.25rem;
       padding: 0.5rem 0.75rem;
     }
   }
