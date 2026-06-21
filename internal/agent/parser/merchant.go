@@ -11,7 +11,7 @@ import (
 // RouteMerchant finds the first MerchantRule whose keyword is a case-insensitive
 // substring of merchant. Returns the account and description, or empty strings if
 // no rule matches (caller should try LLM fallback).
-func RouteMerchant(merchant string, rules []config.MerchantRule) (account, description string) {
+func RouteMerchant(merchant string, rules []config.MerchantPattern) (account, description string) {
 	lower := strings.ToLower(merchant)
 	log.Debugf("merchant: routing %q against %d rules", merchant, len(rules))
 	for _, r := range rules {

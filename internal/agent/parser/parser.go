@@ -1,150 +1,141 @@
-// internal/agent/parser/parser.go
 package parser
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/ananthakumaran/paisa/internal/agent/config"
-	"github.com/ananthakumaran/paisa/internal/agent/ledger"
-	log "github.com/sirupsen/logrus"
 )
 
-// Classify scans the accounts list top-to-bottom and returns the first rule
-// where ALL identifiers appear in the SMS. Fixed routes win because they are
-// listed first in the YAML.
-func Classify(sms string, accounts []config.AccountRule) (*config.AccountRule, error) {
-	log.Debugf("classify: checking %d account rules", len(accounts))
-	for i, rule := range accounts {
-		missing := missingIdentifiers(sms, rule.Identifiers)
-		if len(missing) == 0 {
-			log.Infof("classify: matched rule bank=%q destinations=%q", rule.Bank, rule.Destinations)
-			return &accounts[i], nil
-		}
-		log.Debugf("classify: rule bank=%q skipped — missing identifiers: %v", rule.Bank, missing)
+type ParsedTransaction struct {
+	Date                   string  `json:"date"`
+	Amount                 float64 `json:"amount"`
+	Currency               string  `json:"currency"`
+	Merchant               string  `json:"merchant"`
+	AccountLast4           string  `json:"account_last4"`
+	Bank                   string  `json:"bank"`
+	RefID                  string  `json:"ref_id"`
+	TxType                 string  `json:"tx_type"`
+	SuggestedLedgerAccount string  `json:"suggested_ledger_account"`
+	Confidence             float64 `json:"confidence"`
+	SourceAccount          string  `json:"source_account,omitempty"`
+}
+
+type Parser struct {
+	url   string
+	model string
+	rules config.ParserRules
+}
+
+func New(url, model string, rules config.ParserRules) *Parser {
+	return &Parser{url: url, model: model, rules: rules}
+}
+
+var responseSchema = map[string]interface{}{
+	"type": "object",
+	"properties": map[string]interface{}{
+		"date":                     map[string]string{"type": "string"},
+		"amount":                   map[string]string{"type": "number"},
+		"currency":                 map[string]string{"type": "string"},
+		"merchant":                 map[string]string{"type": "string"},
+		"account_last4":            map[string]string{"type": "string"},
+		"bank":                     map[string]string{"type": "string"},
+		"ref_id":                   map[string]string{"type": "string"},
+		"tx_type":                  map[string]string{"type": "string"},
+		"suggested_ledger_account": map[string]string{"type": "string"},
+		"confidence":               map[string]string{"type": "number"},
+	},
+	"required": []string{"date", "amount", "currency", "merchant", "tx_type", "confidence"},
+}
+
+var multiSchema = map[string]interface{}{
+	"type":  "array",
+	"items": responseSchema,
+}
+
+func (p *Parser) Parse(rawText string, knownAccounts []string) (ParsedTransaction, error) {
+	if tx, ok := RegexParse(rawText, p.rules); ok {
+		return tx, nil
 	}
-	log.Warnf("classify: no rule matched (SMS length=%d)", len(sms))
-	return nil, fmt.Errorf("no matching account rule for SMS")
-}
 
-// missingIdentifiers returns which identifiers from the rule are absent in the SMS.
-func missingIdentifiers(sms string, identifiers []string) []string {
-	var missing []string
-	for _, id := range identifiers {
-		if !strings.Contains(sms, id) {
-			missing = append(missing, id)
-		}
+	accountHint := ""
+	if len(knownAccounts) > 0 {
+		accountHint = fmt.Sprintf("\nKnown ledger accounts (choose suggested_ledger_account from these): %s",
+			strings.Join(knownAccounts, ", "))
 	}
-	return missing
-}
 
-func matchesAll(sms string, identifiers []string) bool {
-	return len(missingIdentifiers(sms, identifiers)) == 0
-}
+	prompt := fmt.Sprintf(`Extract transaction details from this bank notification as JSON.
+amount: negative for debits (money leaving account), positive for credits.
+confidence: 0.0–1.0 certainty of extraction.
+date format: YYYY-MM-DD.%s
 
-// Parse builds a ledger Entry from an SMS given the matched AccountRule.
-// Fixed routes derive all fields from the YAML rule + generic amount/date extractor.
-// Format routes call the bank-specific extractor then apply merchant routing.
-func Parse(sms string, rule *config.AccountRule, merchants []config.MerchantRule) (*ledger.Entry, error) {
-	if rule.Bank == "fixed" {
-		log.Debugf("parse: taking fixed route (desc=%q dest=%q)", rule.Description, rule.Src)
-		return parseFixed(sms, rule)
-	}
-	log.Debugf("parse: taking format route for bank=%q", rule.Bank)
-	return parseFormat(sms, rule, merchants)
-}
+Text: %s`, accountHint, rawText)
 
-func parseFixed(sms string, rule *config.AccountRule) (*ledger.Entry, error) {
-	rawAmt, _, err := ExtractAmountFromSMS(sms)
+	content, err := p.callOllama(prompt, responseSchema)
 	if err != nil {
-		log.Warnf("parse/fixed: amount extraction failed: %v", err)
-		return nil, fmt.Errorf("fixed route: %w", err)
+		return ParsedTransaction{}, err
 	}
-	norm, err := NormaliseAmount(rawAmt)
+
+	var tx ParsedTransaction
+	return tx, json.Unmarshal([]byte(content), &tx)
+}
+
+func (p *Parser) ParseMultiple(rawText string, knownAccounts []string) ([]ParsedTransaction, error) {
+	accountHint := ""
+	if len(knownAccounts) > 0 {
+		accountHint = fmt.Sprintf("\nKnown ledger accounts: %s", strings.Join(knownAccounts, ", "))
+	}
+
+	prompt := fmt.Sprintf(`Extract ALL transactions from this bank statement as a JSON array.
+Each element: date (YYYY-MM-DD), amount (negative=debit, positive=credit), currency, merchant, account_last4, bank, ref_id, tx_type, suggested_ledger_account, confidence.%s
+
+Statement text:
+%s`, accountHint, rawText)
+
+	content, err := p.callOllama(prompt, multiSchema)
 	if err != nil {
 		return nil, err
 	}
-	rawDate, err := ExtractDateFromSMS(sms)
-	if err != nil {
-		log.Warnf("parse/fixed: date extraction failed: %v", err)
-		return nil, fmt.Errorf("fixed route: %w", err)
-	}
-	date, err := NormaliseDate(rawDate)
-	if err != nil {
-		return nil, err
-	}
-	log.Debugf("parse/fixed: rawAmt=%q→%q rawDate=%q→%q", rawAmt, norm, rawDate, date)
-	// Fixed routes always use positive amount on destinations:
-	// the sign is implied by the account pair (e.g. CC gets payment = positive).
-	return &ledger.Entry{
-		Date: date,
-		Desc: rule.Description,
-		Src:  rule.Destinations,
-		Amt:  FormatEntryAmount(norm, false),
-		Dest: rule.Src,
-	}, nil
+
+	var txns []ParsedTransaction
+	return txns, json.Unmarshal([]byte(content), &txns)
 }
 
-func parseFormat(sms string, rule *config.AccountRule, merchants []config.MerchantRule) (*ledger.Entry, error) {
-	var merchant, rawDate, rawAmt string
-	var isDebit bool
-	var err error
-
-	switch rule.Bank {
-	case "icici_cc":
-		merchant, rawDate, rawAmt, isDebit, err = ExtractIciciCC(sms)
-	case "hdfc_debit":
-		merchant, rawDate, rawAmt, isDebit, err = ExtractHdfcDebit(sms)
-	case "hdfc_cc":
-		merchant, rawDate, rawAmt, isDebit, err = ExtractHdfcCC(sms)
-	case "axis_checking":
-		merchant, rawDate, rawAmt, isDebit, err = ExtractAxisChecking(sms)
-	case "axis_cc":
-		merchant, rawDate, rawAmt, isDebit, err = ExtractAxisCC(sms)
-	case "idfc_checking":
-		merchant, rawDate, rawAmt, isDebit, err = ExtractIDFCChecking(sms)
-	default:
-		log.Debugf("parse/format: unknown bank %q — using generic extractor", rule.Bank)
-		rawAmt, isDebit, err = ExtractAmountFromSMS(sms)
-		if err != nil {
-			return nil, fmt.Errorf("unknown bank %q: %w", rule.Bank, err)
-		}
-		rawDate, err = ExtractDateFromSMS(sms)
-		if err != nil {
-			return nil, fmt.Errorf("unknown bank %q date: %w", rule.Bank, err)
-		}
+func (p *Parser) callOllama(prompt string, schema interface{}) (string, error) {
+	body := map[string]interface{}{
+		"model": p.model,
+		"messages": []map[string]string{
+			{"role": "user", "content": prompt},
+		},
+		"format": schema,
+		"stream": false,
 	}
+
+	data, err := json.Marshal(body)
 	if err != nil {
-		log.Warnf("parse/format bank=%q: extraction failed: %v", rule.Bank, err)
-		return nil, err
+		return "", err
 	}
 
-	log.Debugf("parse/format bank=%q: merchant=%q rawDate=%q rawAmt=%q isDebit=%v",
-		rule.Bank, merchant, rawDate, rawAmt, isDebit)
-
-	norm, err := NormaliseAmount(rawAmt)
+	resp, err := http.Post(p.url+"/api/chat", "application/json", bytes.NewReader(data))
 	if err != nil {
-		log.Warnf("parse/format bank=%q: amount normalise failed rawAmt=%q: %v", rule.Bank, rawAmt, err)
-		return nil, err
+		return "", fmt.Errorf("ollama request: %w", err)
 	}
-	date, err := NormaliseDate(rawDate)
-	if err != nil {
-		log.Warnf("parse/format bank=%q: date normalise failed rawDate=%q: %v", rule.Bank, rawDate, err)
-		return nil, err
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("ollama returned %d", resp.StatusCode)
 	}
 
-	account, desc := RouteMerchant(merchant, merchants)
-	if account == "" {
-		log.Debugf("parse/format: merchant=%q — no rule matched, LLM will fill dest+desc", merchant)
-	} else {
-		log.Debugf("parse/format: merchant=%q → account=%q desc=%q", merchant, account, desc)
+	var result struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
 	}
-
-	return &ledger.Entry{
-		Date: date,
-		Desc: desc,
-		Src:  rule.Destinations,
-		Amt:  FormatEntryAmount(norm, isDebit),
-		Dest: account,
-	}, nil
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decode ollama response: %w", err)
+	}
+	return result.Message.Content, nil
 }

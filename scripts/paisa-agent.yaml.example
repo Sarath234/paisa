@@ -1,114 +1,92 @@
-# paisa-agent.yaml — copy to ~/.config/paisa-agent/paisa-agent.yaml and fill in your values
+# paisa-agent.yaml — copy to ~/.config/paisa-agent/paisa-agent.yaml
 
 paisa:
   url: http://localhost:7500
-  journal_dir: /path/to/your/journal   # directory containing your .ledger files
+  journal_dir: /path/to/your/journal
+  api_token: ""
 
 ollama:
   url: http://localhost:11434
-  model: gemma3:4b                     # or gemma3:12b for better accuracy
+  model: gemma3:12b
 
 telegram:
-  bot_token: "YOUR_BOT_TOKEN"          # from @BotFather
-  chat_id: 123456789                   # your personal chat ID (get from @userinfobot)
+  bot_token: "YOUR_BOT_TOKEN"
+  chat_id: 123456789
+
+gmail:
+  credentials_file: /path/to/credentials.json
+  poll_interval_seconds: 300
+  labels:
+    - INBOX
+
+merchant_rules:
+  auto_approve_threshold: 10000
+  promote_after_approvals: 3
 
 parser_rules:
+  day_parts:
+    breakfast_end: 11
+    lunch_end: 15
+    dinner_end: 20
 
-  # ── Account entries ────────────────────────────────────────────────────────
-  # Each entry has:
-  #   bank:        format key (icici_cc | hdfc_debit | hdfc_cc | axis_checking |
-  #                             axis_cc | idfc_checking | fi_checking | jupiter | fixed)
-  #   identifiers: ALL substrings must appear in the SMS (AND match)
-  #   destinations: ledger account for the journal first line (explicit amount)
-  #   src:         (fixed routes only) where money flows from (journal second line)
-  #   description: (fixed routes only) journal description line
-  #
-  # Put fixed routes BEFORE format entries so they win when a message matches both.
-  accounts:
-
-    # ── Fixed routes ────────────────────────────────────────────────────────
-
-    - bank: fixed
-      identifiers: ["CRD-PMNT", "1234"]
-      src: "Assets:Checking:YOUR_CHECKING"
-      destinations: "Liabilities:CreditCard:YOUR_CC"
-      description: "CC Payment"
-
-    # ── Format entries ──────────────────────────────────────────────────────
-
-    - bank: icici_cc
-      identifiers: ["ICICI Bank Card XX4567"]
-      destinations: "Liabilities:CreditCard:ICIC4567"
-
-    - bank: hdfc_debit
-      identifiers: ["HDFC Bank Card 8901"]
-      destinations: "Assets:Checking:HDFC8901"
-
-    - bank: hdfc_cc
-      identifiers: ["HDFC Bank Card 2345"]
-      destinations: "Liabilities:CreditCard:HDFC2345"
-
-    - bank: axis_checking
-      identifiers: ["A/c no. XX6789"]
-      destinations: "Assets:Checking:AXIS6789"
-
-    - bank: axis_cc
-      identifiers: ["Card no. XX0123"]
-      destinations: "Liabilities:CreditCard:AXIS0123"
-
-    - bank: idfc_checking
-      identifiers: ["XX4567"]
-      destinations: "Assets:Checking:IDFC4567"
-
-  # ── Merchant routing rules ─────────────────────────────────────────────────
-  # keyword: case-insensitive substring match against the extracted merchant name
-  # Checked in order; first match wins. Add custom entries at the top to override.
-
+  # First keyword match wins. Empty keyword = catch-all (must be last).
   merchants:
-    # Food
-    - keyword: "swiggy"
+    - keyword: swiggy
+      description: "Food: {day_part}"
+      account: "Expenses:Food:Hyd:Swiggy"
+    - keyword: zomato
+      description: "Food: {day_part}"
+      account: "Expenses:Food:Hyd:Zomato"
+    - keyword: zepto
+      description: "Groceries"
+      account: "Expenses:Groceries:Hyd"
+    - keyword: food
+      description: "Food: {day_part}"
       account: "Expenses:Food:Hyd"
-      description: "Food Swiggy"
-    - keyword: "zomato"
-      account: "Expenses:Food:Hyd"
-      description: "Food Zomato"
+    - keyword: ""
+      description: "Misc"
+      account: "Expenses:Misc:Hyd"
 
-    # Groceries
-    - keyword: "blinkit"
-      account: "Expenses:Groceries:Hyd"
-      description: "Groceries Blink"
-    - keyword: "zepto"
-      account: "Expenses:Groceries:Hyd"
-      description: "Groceries ZEPTO"
-    - keyword: "bigbasket"
-      account: "Expenses:Groceries:Hyd"
-      description: "Groceries BigBasket"
-
-    # Commute
-    - keyword: "uber"
-      account: "Expenses:Commute:Hyd"
-      description: "Commute: Uber"
-
-    # Travel
-    - keyword: "irctc"
-      account: "Expenses:Travel:Hyd"
-      description: "Travel"
-
-    # Shopping
-    - keyword: "amazon"
-      account: "Expenses:Shopping:Hyd"
-      description: "Shopping: Amazon"
-    - keyword: "flipkart"
-      account: "Expenses:Shopping:Hyd"
-      description: "Shopping: Flipkart"
-
-    # Income
-    - keyword: "monthly interest"
-      account: "Income:Interest:IDFC6977"
-      description: "Bank Interest"
-    - keyword: "interest"
-      account: "Income:Interest"
-      description: "Bank Interest"
-    - keyword: "salary"
-      account: "Income:Salary"
-      description: "Salary"
+  # First rule where ALL contains strings match wins.
+  # dest_account + description override merchant matching (fixed payees like EMI).
+  sources:
+    - id: fi_upi
+      contains: ["debited via UPI on"]
+      account: "Assets:Checking:FI5687"
+    - id: fi_upi_alt
+      contains: ["debited from your A/c via UPI on"]
+      account: "Assets:Checking:FI5687"
+    - id: fi_dc
+      contains: ["spent@"]
+      account: "Assets:Checking:FI5687"
+    - id: fi_dc_alt
+      contains: ["You've spent INR "]
+      account: "Assets:Checking:FI5687"
+    - id: axis_upi
+      contains: ["A/c no. XX6386"]
+      account: "Assets:Checking:AXIS6386"
+    - id: cc_fk
+      contains: ["Card no. XX8860"]
+      account: "Liabilities:CreditCard:FK8860"
+    - id: cc_mz
+      contains: ["Card no. XX1610"]
+      account: "Liabilities:CreditCard:MyZone1610"
+    - id: cc_select
+      contains: ["Card no. XX6792"]
+      account: "Liabilities:CreditCard:SELECT6792"
+    - id: food_card
+      contains: ["HDFC Bank Prepaid Card 2148"]
+      account: "Assets:Checking:FC2148"
+    - id: canara_loan
+      contains: ["XXXXX21343", "Canara Bank", "Loan Drawdown"]
+      account: "Assets:Checking:CANA1343"
+      dest_account: "Liabilities:Loan:CANAHL1090"
+      description: "EMI: Home Loan"
+    - id: jupiter
+      contains: ["XX6465"]
+      account: "Assets:Checking:JUPI5114"
+    - id: term_insurance
+      contains: ["Sarath M payment of Rs.1672 for your TATA AIA Life policy"]
+      account: "Assets:Checking:AXIS6386"
+      dest_account: "Expenses:Insurance:TATA0299"
+      description: "Insurance: Term Insurance Premium"

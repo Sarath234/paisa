@@ -18,75 +18,118 @@ import (
 )
 
 type priceCache struct {
-	pricesTree        map[string]*btree.BTree
+	// postingPricesTree holds posting-derived (unknown-type) prices.
+	// Immutable after buildPriceCache; no lock needed.
 	postingPricesTree map[string]*btree.BTree
+
+	// latestKnownPrice holds the single most-recent external price per commodity.
+	// Built eagerly via a cheap GROUP BY query; used by the "today" fast path.
+	// Immutable after buildPriceCache; no lock needed.
+	latestKnownPrice map[string]price.Price
+
+	// pricesTree holds full external price history, lazily loaded per commodity
+	// on first historical lookup. Protected by mu.
+	mu          sync.RWMutex
+	pricesTree  map[string]*btree.BTree
+	knownLoaded map[string]bool
 }
 
-// pcachePtr holds a *priceCache atomically. nil means uninitialised.
-// ClearPriceCache stores nil; ensureCache does a compare-and-swap to populate it.
 var (
 	pcachePtr  atomic.Pointer[priceCache]
-	pcacheLoad sync.Mutex // serialises concurrent initial loads
+	pcacheLoad sync.Mutex
 )
 
 func buildPriceCache(db *gorm.DB) *priceCache {
 	c := &priceCache{
-		pricesTree:        make(map[string]*btree.BTree),
 		postingPricesTree: make(map[string]*btree.BTree),
+		latestKnownPrice:  make(map[string]price.Price),
+		pricesTree:        make(map[string]*btree.BTree),
+		knownLoaded:       make(map[string]bool),
 	}
 
-	var prices []price.Price
-	result := db.Where("commodity_type != ?", config.Unknown).Find(&prices)
-	if result.Error != nil {
-		log.Fatal(result.Error)
-	}
-
-	for _, p := range prices {
-		if c.pricesTree[p.CommodityName] == nil {
-			c.pricesTree[p.CommodityName] = btree.New(2)
-		}
-		c.pricesTree[p.CommodityName].ReplaceOrInsert(p)
-	}
-
-	// Load only distinct non-currency commodity names instead of all posting rows.
+	// Load distinct non-currency commodities from postings.
 	var allCommodities []string
 	if r := db.Model(&posting.Posting{}).Distinct().Pluck("commodity", &allCommodities); r.Error != nil {
 		log.Fatal(r.Error)
 	}
 
-	// Bulk-load all Unknown-type prices in one query instead of N per-commodity queries.
+	// Eagerly load posting-derived (unknown-type) prices — fast fallback.
 	var unknownPrices []price.Price
 	if r := db.Where("commodity_type = ?", config.Unknown).Find(&unknownPrices); r.Error != nil {
 		log.Fatal(r.Error)
 	}
 	unknownByName := lo.GroupBy(unknownPrices, func(p price.Price) string { return p.CommodityName })
-
-	for _, commodityName := range allCommodities {
-		if !utils.IsCurrency(commodityName) {
-			postingPricesTree := btree.New(2)
-			for _, p := range unknownByName[commodityName] {
-				postingPricesTree.ReplaceOrInsert(p)
+	for _, name := range allCommodities {
+		if !utils.IsCurrency(name) {
+			tree := btree.New(2)
+			for _, p := range unknownByName[name] {
+				tree.ReplaceOrInsert(p)
 			}
-			c.postingPricesTree[commodityName] = postingPricesTree
-
-			if c.pricesTree[commodityName] == nil {
-				c.pricesTree[commodityName] = postingPricesTree
-			}
+			c.postingPricesTree[name] = tree
 		}
 	}
 
+	// Eagerly load the single most-recent external price per commodity.
+	// One cheap query (~90 rows) replaces the original full-history bulk load.
+	var latestPrices []price.Price
+	if r := db.Raw(`
+		SELECT p.* FROM prices p
+		INNER JOIN (
+			SELECT commodity_name, MAX(date) AS max_date
+			FROM prices
+			WHERE commodity_type != ?
+			GROUP BY commodity_name
+		) AS latest ON p.commodity_name = latest.commodity_name AND p.date = latest.max_date
+		WHERE p.commodity_type != ?`, config.Unknown, config.Unknown).Scan(&latestPrices); r.Error != nil {
+		log.Warn("load latest known prices: ", r.Error)
+	}
+	for _, p := range latestPrices {
+		c.latestKnownPrice[p.CommodityName] = p
+	}
+
+	// Full external price histories are loaded lazily per commodity on first
+	// historical lookup (see loadKnownPrices / GetUnitPrice).
 	return c
 }
 
-// ensureCache returns the current priceCache, building it if needed.
-// Safe for concurrent callers; only one goroutine will build the cache.
+// loadKnownPrices ensures the full external price history for commodity is in
+// c.pricesTree. Safe for concurrent callers; loads from DB at most once per
+// commodity per cache lifetime.
+func loadKnownPrices(db *gorm.DB, c *priceCache, commodity string) {
+	c.mu.RLock()
+	loaded := c.knownLoaded[commodity]
+	c.mu.RUnlock()
+	if loaded {
+		return
+	}
+
+	// Do the DB query outside any lock so concurrent requests don't serialise.
+	var prices []price.Price
+	if r := db.Where("commodity_type != ? AND commodity_name = ?", config.Unknown, commodity).Find(&prices); r.Error != nil {
+		log.Warnf("load known prices for %s: %v", commodity, r.Error)
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.knownLoaded[commodity] {
+		return
+	}
+	if len(prices) > 0 {
+		tree := btree.New(2)
+		for _, p := range prices {
+			tree.ReplaceOrInsert(p)
+		}
+		c.pricesTree[commodity] = tree
+	}
+	c.knownLoaded[commodity] = true
+}
+
 func ensureCache(db *gorm.DB) *priceCache {
 	if c := pcachePtr.Load(); c != nil {
 		return c
 	}
 	pcacheLoad.Lock()
 	defer pcacheLoad.Unlock()
-	// Double-check after acquiring the mutex.
 	if c := pcachePtr.Load(); c != nil {
 		return c
 	}
@@ -102,26 +145,54 @@ func ClearPriceCache() {
 func GetUnitPrice(db *gorm.DB, commodity string, date time.Time) price.Price {
 	c := ensureCache(db)
 
+	if utils.IsCurrency(commodity) {
+		return price.Price{}
+	}
+
+	today := utils.EndOfToday()
+
+	// Fast path: for today-or-later queries use the pre-loaded latest price.
+	// PopulateMarketPrice always uses EndOfToday(), so this covers the hot path
+	// without ever loading full price history.
+	if !date.Before(today) {
+		if p, ok := c.latestKnownPrice[commodity]; ok {
+			return p
+		}
+		// Fall through to posting-derived prices.
+		if pt := c.postingPricesTree[commodity]; pt != nil {
+			return utils.BTreeDescendFirstLessOrEqual(pt, price.Price{Date: date})
+		}
+		log.Warn("No price found for commodity: ", commodity)
+		return price.Price{}
+	}
+
+	// Historical path: lazy-load full price history for this commodity.
+	loadKnownPrices(db, c, commodity)
+
+	c.mu.RLock()
 	pt := c.pricesTree[commodity]
-	if pt == nil {
-		log.Warn("No price tree found for commodity: ", commodity)
-		return price.Price{}
+	c.mu.RUnlock()
+
+	if pt != nil {
+		pc := utils.BTreeDescendFirstLessOrEqual(pt, price.Price{Date: date})
+		if !pc.Value.Equal(decimal.Zero) {
+			return pc
+		}
 	}
 
-	pc := utils.BTreeDescendFirstLessOrEqual(pt, price.Price{Date: date})
-	if !pc.Value.Equal(decimal.Zero) {
-		return pc
+	if pt := c.postingPricesTree[commodity]; pt != nil {
+		return utils.BTreeDescendFirstLessOrEqual(pt, price.Price{Date: date})
 	}
-
-	pt = c.postingPricesTree[commodity]
-	if pt == nil {
-		return price.Price{}
-	}
-	return utils.BTreeDescendFirstLessOrEqual(pt, price.Price{Date: date})
+	log.Warn("No price tree found for commodity: ", commodity)
+	return price.Price{}
 }
 
 func GetAllPrices(db *gorm.DB, commodity string) []price.Price {
 	c := ensureCache(db)
+
+	if !utils.IsCurrency(commodity) {
+		loadKnownPrices(db, c, commodity)
+	}
 
 	pmap := make(map[string]price.Price)
 
@@ -131,7 +202,11 @@ func GetAllPrices(db *gorm.DB, commodity string) []price.Price {
 		}
 	}
 
-	if pt := c.pricesTree[commodity]; pt != nil {
+	c.mu.RLock()
+	pt := c.pricesTree[commodity]
+	c.mu.RUnlock()
+
+	if pt != nil {
 		for _, p := range utils.BTreeToSlice[price.Price](pt) {
 			pmap[p.Date.String()] = p
 		}

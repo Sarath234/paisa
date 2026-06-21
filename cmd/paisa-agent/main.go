@@ -1,171 +1,153 @@
-// cmd/paisa-agent/main.go
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
-	"fmt"
-	"strings"
+	"net/http"
+	"os"
+	"path/filepath"
+	"time"
 
-	"github.com/ananthakumaran/paisa/internal/agent/approval"
-	"github.com/ananthakumaran/paisa/internal/agent/config"
-	agentledger "github.com/ananthakumaran/paisa/internal/agent/ledger"
-	"github.com/ananthakumaran/paisa/internal/agent/llm"
-	"github.com/ananthakumaran/paisa/internal/agent/parser"
-	"github.com/ananthakumaran/paisa/internal/agent/telegram"
+	agentconfig "github.com/ananthakumaran/paisa/internal/agent/config"
+	agentdb "github.com/ananthakumaran/paisa/internal/agent/db"
+	"github.com/ananthakumaran/paisa/internal/agent/gmail"
+	"github.com/ananthakumaran/paisa/internal/agent/merchant"
+	"github.com/ananthakumaran/paisa/internal/agent/pipeline"
 	log "github.com/sirupsen/logrus"
 )
 
 func main() {
-	cfgPath := flag.String("config", "paisa-agent.yaml", "path to paisa-agent.yaml")
+	var cfgPath string
+	flag.StringVar(&cfgPath, "config", "", "path to paisa-agent.yaml")
 	flag.Parse()
 
-	cfg, err := config.Load(*cfgPath)
+	if cfgPath == "" {
+		home, _ := os.UserHomeDir()
+		cfgPath = filepath.Join(home, ".config", "paisa-agent", "paisa-agent.yaml")
+	}
+
+	cfg, err := agentconfig.Load(cfgPath)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
 
-	if err := agentledger.EnsureFile(cfg.Paisa.JournalDir); err != nil {
-		log.Warnf("ensure auto-import.ledger: %v", err)
+	dbPath := filepath.Join(os.Getenv("HOME"), ".local", "share", "paisa-agent", "agent.db")
+	_ = os.MkdirAll(filepath.Dir(dbPath), 0755)
+
+	db, err := agentdb.Open(dbPath)
+	if err != nil {
+		log.Fatalf("open db: %v", err)
 	}
 
-	bot := telegram.NewBot(cfg.Telegram.BotToken, cfg.Telegram.ChatID)
-	store := approval.NewStore()
-
-	log.Infof("paisa-agent started — polling Telegram (chat_id=%d)", cfg.Telegram.ChatID)
-
-	for {
-		updates, err := bot.Poll()
-		if err != nil {
-			log.Errorf("poll error: %v", err)
-			continue
+	if cfg.Paisa.JournalDir != "" {
+		journalPath := filepath.Join(cfg.Paisa.JournalDir, "main.journal")
+		if err := merchant.Bootstrap(db, journalPath, cfg.MerchantRules.PromoteAfterApprovals); err != nil {
+			log.Warnf("bootstrap merchant rules: %v", err)
 		}
-		for _, u := range updates {
-			switch {
-			case u.CallbackQuery != nil:
-				handleCallback(u.CallbackQuery, bot, store, cfg)
-			case u.Message != nil:
-				handleMessage(u.Message, bot, store, cfg)
+	}
+
+	pipe := pipeline.New(db, cfg)
+
+	// Goroutine 1: Telegram long-poll (SMS relay + callback handling)
+	go func() {
+		log.Info("telegram poller started")
+		for {
+			updates, err := pipe.Bot().GetUpdates()
+			if err != nil {
+				log.Warnf("telegram getUpdates: %v", err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+			for _, u := range updates {
+				if u.CallbackQuery != nil {
+					pipe.HandleCallback(u.CallbackQuery.ID, u.CallbackQuery.Data)
+				} else if u.Message != nil && u.Message.Text != "" {
+					action, err := pipe.Process(u.Message.Text, "sms")
+					if err != nil {
+						log.Warnf("pipeline sms: %v", err)
+					}
+					log.Infof("telegram msg processed: action=%d", action)
+				}
 			}
 		}
-	}
-}
+	}()
 
-func handleMessage(msg *telegram.Message, bot *telegram.Bot, store *approval.Store, cfg *config.Config) {
-	if msg.Chat.ID != cfg.Telegram.ChatID {
-		return
-	}
+	// Goroutine 2: Gmail poller (skipped if credentials not configured)
+	if cfg.Gmail.CredentialsFile != "" {
+		go func() {
+			log.Info("gmail poller started")
+			tokenFile := filepath.Join(filepath.Dir(cfgPath), "gmail-token.json")
+			svc, err := gmail.NewService(context.Background(), cfg.Gmail.CredentialsFile, tokenFile)
+			if err != nil {
+				log.Fatalf("gmail auth: %v", err)
+			}
+			poller := gmail.NewPoller(svc, cfg.Gmail.Labels)
+			interval := time.Duration(cfg.Gmail.PollIntervalSeconds) * time.Second
 
-	// If this chat has an entry in editing state, route as an edit reply.
-	if pending := store.GetEditingByChatID(msg.Chat.ID); pending != nil {
-		log.Debugf("message: routing as edit reply for msgID=%d", pending.MessageID)
-		updated := telegram.ParseEditReply(msg.Text, pending.Entry)
-		store.Delete(pending.MessageID)
-		sendDraft(updated, bot, store, cfg)
-		return
-	}
-
-	preview := msg.Text
-	if len(preview) > 80 {
-		preview = preview[:80] + "…"
-	}
-	log.Infof("message: new SMS received (len=%d): %q", len(msg.Text), preview)
-
-	// Otherwise treat the message text as a new bank SMS.
-	entry, err := parseAndFill(msg.Text, cfg)
-	if err != nil {
-		log.Errorf("parse: %v", err)
-		bot.SendText(fmt.Sprintf("❌ Could not parse: %v", err))
-		return
-	}
-	log.Infof("parse: success — date=%q desc=%q amt=%q src=%q dest=%q",
-		entry.Date, entry.Desc, entry.Amt, entry.Src, entry.Dest)
-	sendDraft(*entry, bot, store, cfg)
-}
-
-func parseAndFill(sms string, cfg *config.Config) (*agentledger.Entry, error) {
-	rule, err := parser.Classify(sms, cfg.ParserRules.Accounts)
-	if err != nil {
-		return nil, err
-	}
-	log.Debugf("parse: classified as bank=%q destinations=%q", rule.Bank, rule.Destinations)
-
-	entry, err := parser.Parse(sms, rule, cfg.ParserRules.Merchants)
-	if err != nil {
-		return nil, err
+			for {
+				emails, err := poller.Poll(context.Background())
+				if err != nil {
+					log.Warnf("gmail poll: %v", err)
+				} else {
+					for _, email := range emails {
+						if email.Type == gmail.StatementEmail {
+							gaps, dups, err := pipe.ProcessStatement(email.PDFText)
+							if err != nil {
+								log.Warnf("pipeline statement: %v", err)
+							} else {
+								log.Infof("statement processed: %d gaps, %d dups", gaps, dups)
+							}
+						} else {
+							if email.Body == "" {
+								continue
+							}
+							if _, err := pipe.Process(email.Body, "gmail_alert"); err != nil {
+								log.Warnf("pipeline gmail: %v", err)
+							}
+						}
+					}
+				}
+				time.Sleep(interval)
+			}
+		}()
 	}
 
-	needsLLM := entry.Dest == "" || entry.Desc == ""
-	if needsLLM {
-		log.Infof("parse: regex incomplete — desc=%q dest=%q — invoking LLM", entry.Desc, entry.Dest)
-		if llmErr := llm.FillMissing(sms, entry, cfg.Ollama); llmErr != nil {
-			log.Warnf("llm fallback: %v", llmErr)
+	// HTTP server for UI parse requests
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/parse", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			var req struct {
+				Text string `json:"text"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Text == "" {
+				http.Error(w, `{"error":"text is required"}`, http.StatusBadRequest)
+				return
+			}
+			tx, err := pipe.ParseText(req.Text)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(tx)
+		})
+		addr := cfg.Listen
+		if addr == "" {
+			addr = "127.0.0.1:7501"
 		}
-	}
-	return entry, nil
-}
-
-func sendDraft(entry agentledger.Entry, bot *telegram.Bot, store *approval.Store, cfg *config.Config) {
-	draftText := telegram.FormatDraft(entry)
-
-	dup, err := agentledger.IsDuplicate(cfg.Paisa.JournalDir, &entry)
-	if err != nil {
-		log.Warnf("duplicate check: %v", err)
-	}
-
-	var msgID int
-	if dup {
-		log.Infof("draft: sending as duplicate (date=%q amt=%q)", entry.Date, entry.Amt)
-		msgID, err = bot.SendDraftDuplicate(draftText)
-	} else {
-		msgID, err = bot.SendDraft(draftText)
-	}
-	if err != nil {
-		log.Errorf("send draft: %v", err)
-		return
-	}
-	log.Debugf("draft: sent msgID=%d", msgID)
-
-	store.Set(&approval.Pending{
-		Entry:     entry,
-		ChatID:    cfg.Telegram.ChatID,
-		MessageID: msgID,
-		Status:    approval.StatusPending,
-	})
-}
-
-func handleCallback(cb *telegram.CallbackQuery, bot *telegram.Bot, store *approval.Store, cfg *config.Config) {
-	bot.AnswerCallback(cb.ID)
-
-	if cb.Message == nil {
-		return
-	}
-	if cb.Message.Chat.ID != cfg.Telegram.ChatID {
-		return
-	}
-	msgID := cb.Message.MessageID
-	pending := store.Get(msgID)
-	if pending == nil {
-		log.Debugf("callback for unknown messageID %d (agent may have restarted)", msgID)
-		return
-	}
-
-	switch strings.ToLower(cb.Data) {
-	case "approve":
-		if err := agentledger.Append(cfg.Paisa.JournalDir, &pending.Entry); err != nil {
-			log.Errorf("append entry: %v", err)
-			bot.EditMessage(msgID, "❌ Failed to post: "+err.Error())
-			return
+		log.Infof("paisa-agent HTTP listening on %s", addr)
+		if err := http.ListenAndServe(addr, mux); err != nil {
+			log.Errorf("paisa-agent HTTP server: %v", err)
 		}
-		bot.EditMessage(msgID, "✅ Posted\n\n"+telegram.FormatDraft(pending.Entry))
-		store.Delete(msgID)
-		log.Infof("posted: %s %s %s", pending.Entry.Date, pending.Entry.Desc, pending.Entry.Amt)
+	}()
 
-	case "edit":
-		store.SetEditing(msgID)
-		bot.SendText(telegram.FormatEditTemplate(pending.Entry))
-
-	case "skip":
-		bot.EditMessage(msgID, "⏭ Skipped\n\n"+telegram.FormatDraft(pending.Entry))
-		store.Delete(msgID)
-	}
+	log.Infof("paisa-agent running, paisa URL: %s", cfg.Paisa.URL)
+	select {}
 }

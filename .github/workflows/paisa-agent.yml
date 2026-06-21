@@ -3,7 +3,7 @@ name: Paisa Agent Release
 on:
   push:
     branches:
-      - feat/auto-ingest-trans
+      - feat/ingestion-agent
     tags:
       - '*'
 

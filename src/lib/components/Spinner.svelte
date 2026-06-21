@@ -1,12 +1,12 @@
 <script lang="ts">
   import { fade } from "svelte/transition";
-  import { delayedLoading, delayedUnLoading } from "../../store";
+  import { loading, delayedLoading, delayedUnLoading } from "../../store";
   import Logo from "./Logo.svelte";
   let size = 90;
 </script>
 
 <div>
-  <div style={$delayedUnLoading || $delayedLoading ? "visibility: hidden" : ""}>
+  <div style={$loading || $delayedUnLoading ? "visibility: hidden" : ""}>
     <slot />
   </div>
   {#if $delayedLoading}

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var testMerchantRules = []config.MerchantRule{
+var testMerchantRules = []config.MerchantPattern{
 	{Keyword: "swiggy", Account: "Expenses:Food:Hyd", Description: "Food Swiggy"},
 	{Keyword: "zomato", Account: "Expenses:Food:Hyd", Description: "Food Zomato"},
 	{Keyword: "blink commerce", Account: "Expenses:Groceries:Hyd", Description: "Groceries Blink"},
