@@ -1,5 +1,6 @@
 <script lang="ts">
   import { afterNavigate, beforeNavigate } from "$app/navigation";
+  import { page } from "$app/stores";
   import { onMount } from "svelte";
   import { followCursor, delegate, hideAll } from "tippy.js";
   import _ from "lodash";
@@ -84,7 +85,9 @@
 
 <QuickEntryModal bind:active={quickEntryActive} />
 <SearchModal bind:active={searchActive} />
-<ChatWidget />
+{#if $page.url.pathname !== "/assistant"}
+  <ChatWidget />
+{/if}
 
 {#key $willRefresh}
   <Navbar

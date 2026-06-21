@@ -71,7 +71,7 @@
 
 <section
   class="section"
-  style="height: calc(100vh - 52px); display: flex; flex-direction: column; padding-bottom: 0; background: {sectionBg};"
+  style="height: calc(100vh - 52px); display: flex; flex-direction: column; padding: 1.5rem 1.25rem 0; background: {sectionBg};"
 >
   <!-- Header -->
   <div class="level mb-3" style="flex-shrink: 0;">
