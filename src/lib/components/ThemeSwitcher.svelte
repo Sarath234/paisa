@@ -38,12 +38,13 @@
 
 <button
   on:click={toggle}
-  class="theme-toggle p-1"
+  class="button is-small is-rounded theme-toggle"
   title="Toggles light & dark"
   aria-label="auto"
   aria-live="polite"
 >
-  <svg class="sun-and-moon" aria-hidden="true" width="24" height="24" viewBox="0 0 24 24">
+  <span class="icon is-small">
+  <svg class="sun-and-moon" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24">
     <mask class="moon" id="moon-mask">
       <rect x="0" y="0" width="100%" height="100%" fill="white" />
       <circle cx="24" cy="10" r="6" fill="black" />
@@ -60,4 +61,5 @@
       <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
     </g>
   </svg>
+  </span>
 </button>

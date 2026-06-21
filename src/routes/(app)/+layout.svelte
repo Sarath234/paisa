@@ -12,6 +12,7 @@
   import A2HSBanner from "$lib/components/A2HSBanner.svelte";
   import NotificationBanner from "$lib/components/NotificationBanner.svelte";
   import { willClearTippy, willRefresh } from "../../store";
+  import { page } from "$app/stores";
 
   let quickEntryActive = false;
   let searchActive = false;
@@ -91,7 +92,9 @@
 
 <QuickEntryModal bind:active={quickEntryActive} />
 <SearchModal bind:active={searchActive} />
-<ChatWidget />
+{#if $page.url.pathname !== "/assistant"}
+  <ChatWidget />
+{/if}
 <PwaRegister />
 <A2HSBanner />
 <NotificationBanner />
