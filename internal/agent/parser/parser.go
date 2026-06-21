@@ -11,29 +11,29 @@ import (
 )
 
 // Classify scans the accounts list top-to-bottom and returns the first rule
-// where ANY identifier appears in the SMS (OR match). Fixed routes win because
+// where ALL identifiers appear in the SMS (AND match). Fixed routes win because
 // they are listed first in the YAML.
 func Classify(sms string, accounts []config.AccountRule) (*config.AccountRule, error) {
 	log.Debugf("classify: checking %d account rules", len(accounts))
 	for i, rule := range accounts {
-		if matchesAny(sms, rule.Identifiers) {
+		if matchesAll(sms, rule.Identifiers) {
 			log.Infof("classify: matched rule bank=%q destinations=%q", rule.Bank, rule.Destinations)
 			return &accounts[i], nil
 		}
-		log.Debugf("classify: rule bank=%q skipped — no identifier matched", rule.Bank)
+		log.Debugf("classify: rule bank=%q skipped — not all identifiers matched", rule.Bank)
 	}
 	log.Warnf("classify: no rule matched (SMS length=%d)", len(sms))
 	return nil, fmt.Errorf("no matching account rule for SMS")
 }
 
-// matchesAny returns true if any identifier from the rule is found in the SMS.
-func matchesAny(sms string, identifiers []string) bool {
+// matchesAll returns true if every identifier from the rule is found in the SMS.
+func matchesAll(sms string, identifiers []string) bool {
 	for _, id := range identifiers {
-		if strings.Contains(sms, id) {
-			return true
+		if !strings.Contains(sms, id) {
+			return false
 		}
 	}
-	return false
+	return len(identifiers) > 0
 }
 
 // Parse builds a ledger Entry from an SMS given the matched AccountRule.

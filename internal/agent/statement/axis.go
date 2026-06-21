@@ -19,7 +19,7 @@ func (p *AxisParser) Name() string { return "axis_savings" }
 
 func (p *AxisParser) Detect(subject string) bool {
 	s := strings.ToLower(subject)
-	return strings.Contains(s, "axis") || strings.Contains(s, "6386")
+	return strings.Contains(s, "axis") || strings.Contains(s, "account statement")
 }
 
 func (p *AxisParser) Parse(pdfBytes []byte) (ParseResult, error) {

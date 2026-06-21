@@ -13,13 +13,13 @@ telegram:
 parser_rules:
   accounts:
     - bank: fixed
-      identifiers: ["CRD-PMNT", "8860"]
-      src: "Assets:Checking:AXIS6386"
-      destinations: "Liabilities:CreditCard:FK8860"
+      identifiers: ["CRD-PMNT", "2222"]
+      src: "Assets:Checking:AXIS1111"
+      destinations: "Liabilities:CreditCard:FK2222"
       description: "CC Payment"
     - bank: hdfc_debit
-      identifiers: ["HDFC Bank Card 2148"]
-      destinations: "Assets:Checking:FC2148"
+      identifiers: ["HDFC Bank Card 6666"]
+      destinations: "Assets:Checking:FC6666"
   merchants:
     - keyword: "swiggy"
       account: "Expenses:Food:Hyd"

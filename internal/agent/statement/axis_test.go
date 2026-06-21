@@ -12,7 +12,7 @@ const sampleAxisText = `
 Statement for the period from 01-05-2026 to 31-05-2026
 
 Savings account(s)
-Account number: XXXXXXXXXX6386
+Account number: XXXXXXXXXX1111
 
 Date         Tran Date   Transaction Particulars                       Chq no.  Withdrawal(Dr)  Deposit(Cr)  Balance
 
@@ -71,8 +71,8 @@ func TestAxisParser_Detect(t *testing.T) {
 		subject string
 		want    bool
 	}{
-		{"Account Statement for XXXXXXXXXX6386", true},
-		{"Axis Bank statement 6386", true},
+		{"Account Statement for XXXXXXXXXX1111", true},
+		{"Axis Bank statement 1111", true},
 		{"HDFC statement", false},
 		{"", false},
 	}

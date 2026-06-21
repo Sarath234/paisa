@@ -17,8 +17,8 @@ func TestLoad(t *testing.T) {
 	assert.Equal(t, int64(123456), cfg.Telegram.ChatID)
 	assert.Len(t, cfg.ParserRules.Accounts, 2)
 	assert.Equal(t, "fixed", cfg.ParserRules.Accounts[0].Bank)
-	assert.Equal(t, []string{"CRD-PMNT", "8860"}, cfg.ParserRules.Accounts[0].Identifiers)
-	assert.Equal(t, "Assets:Checking:AXIS6386", cfg.ParserRules.Accounts[0].Src)
+	assert.Equal(t, []string{"CRD-PMNT", "2222"}, cfg.ParserRules.Accounts[0].Identifiers)
+	assert.Equal(t, "Assets:Checking:AXIS1111", cfg.ParserRules.Accounts[0].Src)
 	assert.Len(t, cfg.ParserRules.Merchants, 1)
 	assert.Equal(t, "swiggy", cfg.ParserRules.Merchants[0].Keyword)
 }

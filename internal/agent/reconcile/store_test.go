@@ -15,7 +15,7 @@ func TestStore_WriteRead(t *testing.T) {
 		Period:      "2026-05",
 		GeneratedAt: time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC),
 		Diff: Diff{
-			Account:        "Assets:Checking:AXIS6386",
+			Account:        "Assets:Checking:AXIS1111",
 			Month:          5,
 			Year:           2026,
 			StatementClose: 9000.00,
