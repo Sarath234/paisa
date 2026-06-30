@@ -212,7 +212,11 @@ func addSegmentedLink(source, target string, amount decimal.Decimal, nodeID *uin
 	srcRootKey := segNodeKey(sroot, 1, sroot)
 	tgtRootKey := segNodeKey(troot, 1, troot)
 
-	if sroot == "Income" {
+	if sroot == "Income" || sroot == "Expenses" {
+		// Income: leaf→root so source hierarchy is visible.
+		// Expenses as source (refund): leaf→root so the refund creates the
+		// inverse of the purchase links; the netting step then reduces the
+		// forward hierarchy to the correct net amount.
 		addSegmentedAccountLinks(nodeID, nodes, links, source, amount, true)
 	} else {
 		ensureSegNode(nodeID, nodes, srcRootKey)
@@ -276,10 +280,71 @@ func computeSegmentedGraph(postings []posting.Posting) Graph {
 		}
 	}
 
+	// Net out bidirectional link pairs so the Sankey layout is cycle-free and
+	// shows net flows (e.g. purchases minus refunds for the same account pair).
+	// Process in sorted order to get deterministic results regardless of map
+	// iteration order.
+	pairs := lo.Keys(links)
+	sort.Slice(pairs, func(i, j int) bool {
+		if pairs[i].Source != pairs[j].Source {
+			return pairs[i].Source < pairs[j].Source
+		}
+		return pairs[i].Target < pairs[j].Target
+	})
+	nettedLinks := make(map[Pair]decimal.Decimal, len(links))
+	for _, p := range pairs {
+		v := links[p]
+		rev := Pair{Source: p.Target, Target: p.Source}
+		if revV, ok := nettedLinks[rev]; ok {
+			net := revV.Sub(v)
+			delete(nettedLinks, rev)
+			if net.IsPositive() {
+				nettedLinks[rev] = net
+			} else if net.IsNegative() {
+				nettedLinks[p] = net.Neg()
+			}
+			// exactly zero: both sides cancel out, nothing to add
+		} else {
+			nettedLinks[p] = v
+		}
+	}
+
+	// Build a reverse-lookup so we can inspect node names after netting.
+	idToName := make(map[uint]string, len(nodes))
+	for name, n := range nodes {
+		idToName[n.ID] = name
+	}
+
+	// Remove any backward within-hierarchy links that survived netting.
+	// These arise when refunds exceed purchases for a sub-category within the
+	// period; keeping them would create intra-hierarchy cycles in the Sankey.
+	// The refund's effect is still captured in the cross-root netting above.
+	//
+	// Node names have the form "RootType:Depth:SegmentName", e.g. "Expenses:2:Flight".
+	nodeDepth := func(name string) int {
+		parts := strings.SplitN(name, ":", 3)
+		if len(parts) < 2 {
+			return 0
+		}
+		d := 0
+		fmt.Sscanf(parts[1], "%d", &d)
+		return d
+	}
+	nodeRootType := func(name string) string {
+		return strings.SplitN(name, ":", 2)[0]
+	}
+	for p := range nettedLinks {
+		srcName := idToName[p.Source]
+		tgtName := idToName[p.Target]
+		if nodeRootType(srcName) == nodeRootType(tgtName) && nodeDepth(srcName) > nodeDepth(tgtName) {
+			delete(nettedLinks, p)
+		}
+	}
+
 	return Graph{
 		Nodes: lo.Values(nodes),
-		Links: lo.Map(lo.Keys(links), func(k Pair, _ int) Link {
-			return Link{Source: k.Source, Target: k.Target, Value: links[k]}
+		Links: lo.Map(lo.Keys(nettedLinks), func(k Pair, _ int) Link {
+			return Link{Source: k.Source, Target: k.Target, Value: nettedLinks[k]}
 		}),
 	}
 }
