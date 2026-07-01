@@ -95,6 +95,8 @@ func parseFormat(sms string, rule *config.AccountRule, merchants []config.Mercha
 		merchant, rawDate, rawAmt, isDebit, err = ExtractAxisChecking(sms)
 	case "axis_cc":
 		merchant, rawDate, rawAmt, isDebit, err = ExtractAxisCC(sms)
+	case "axis_upi":
+		merchant, rawDate, rawAmt, isDebit, err = ExtractAxisUPI(sms)
 	case "idfc_checking":
 		merchant, rawDate, rawAmt, isDebit, err = ExtractIDFCChecking(sms)
 	default:

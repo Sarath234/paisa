@@ -59,12 +59,33 @@ func TestExtractHdfcCC(t *testing.T) {
 }
 
 func TestExtractAxisChecking(t *testing.T) {
-	sms := "INR 1804.05 debited\nA/c no. XX6386\n03-06-26, 10:21:54\nUPI/P2M/102154212206/IRCTC Rail Web\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank"
-	m, d, a, debit, err := parser.ExtractAxisChecking(sms)
+	t.Run("format_a_upi", func(t *testing.T) {
+		sms := "INR 1804.05 debited\nA/c no. XX6386\n03-06-26, 10:21:54\nUPI/P2M/102154212206/IRCTC Rail Web\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank"
+		m, d, a, debit, err := parser.ExtractAxisChecking(sms)
+		assert.NoError(t, err)
+		assert.Equal(t, "IRCTC Rail Web", m)
+		assert.Equal(t, "03-06-26", d)
+		assert.Equal(t, "1804.05", a)
+		assert.True(t, debit)
+	})
+	t.Run("format_b_ach_dr", func(t *testing.T) {
+		sms := "Debit INR 2000.00\nAxis Bank A/c XX1111\n22-06-26 08:41:18\nACH-DR-BD-MF Utilities Lum\nWhatsApp BAL to 917036165000\nNot You? SMS BLOCKALL CustID to 919951860002"
+		m, d, a, debit, err := parser.ExtractAxisChecking(sms)
+		assert.NoError(t, err)
+		assert.Equal(t, "ACH-DR-BD-MF Utilities Lum", m)
+		assert.Equal(t, "22-06-26", d)
+		assert.Equal(t, "2000.00", a)
+		assert.True(t, debit)
+	})
+}
+
+func TestExtractAxisUPI(t *testing.T) {
+	sms := "Your A/c has been debited towards NETFLIX for INR 649.00 on 22-06-26. 7e93d89fa7ba415588a8175198857341@okaxis - Axis Bank"
+	m, d, a, debit, err := parser.ExtractAxisUPI(sms)
 	assert.NoError(t, err)
-	assert.Equal(t, "IRCTC Rail Web", m)
-	assert.Equal(t, "03-06-26", d)
-	assert.Equal(t, "1804.05", a)
+	assert.Equal(t, "NETFLIX", m)
+	assert.Equal(t, "22-06-26", d)
+	assert.Equal(t, "649.00", a)
 	assert.True(t, debit)
 }
 

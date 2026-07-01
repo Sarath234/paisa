@@ -61,30 +61,54 @@ func ExtractHdfcCC(sms string) (merchant, rawDate, rawAmt string, isDebit bool, 
 // "INR 1804.05 debited\nA/c no. XX6386\n03-06-26, 10:21:54\nUPI/P2M/102154212206/IRCTC Rail Web\n..."
 
 var axisChkAmtRe = regexp.MustCompile(`(?i)INR\s+([\d,]+(?:\.\d{1,2})?)\s+(debited|credited)`)
+var axisChkAmtReB = regexp.MustCompile(`(?im)^(Debit|Credit)\s+INR\s+([\d,]+(?:\.\d{1,2})?)`)
 var axisChkDateRe = regexp.MustCompile(`\b(\d{2}-\d{2}-\d{2})\b`)
 var axisChkUPIRe = regexp.MustCompile(`(?i)(UPI/[^\n]+)`)
 
 func ExtractAxisChecking(sms string) (merchant, rawDate, rawAmt string, isDebit bool, err error) {
-	amtM := axisChkAmtRe.FindStringSubmatch(sms)
-	if amtM == nil {
-		log.Debugf("axis_checking: no amount match — pattern expects 'INR <amt> debited/credited'")
-		return "", "", "", false, fmt.Errorf("axis_checking: no amount")
+	// Format A: "INR X debited/credited\nA/c no. XX...\nDD-MM-YY, HH:MM:SS\nUPI/P2M/.../Merchant"
+	if amtM := axisChkAmtRe.FindStringSubmatch(sms); amtM != nil {
+		dateM := axisChkDateRe.FindStringSubmatch(sms)
+		if dateM == nil {
+			log.Debugf("axis_checking: no date match — rawAmt=%q; pattern expects DD-MM-YY", amtM[1])
+			return "", "", "", false, fmt.Errorf("axis_checking: no date")
+		}
+		merchantStr := ""
+		if upiM := axisChkUPIRe.FindStringSubmatch(sms); upiM != nil {
+			merchantStr = extractUPIMerchant(upiM[1])
+			log.Debugf("axis_checking: UPI ref=%q → merchant=%q", upiM[1], merchantStr)
+		} else {
+			log.Debugf("axis_checking: no UPI ref found — merchant will be empty (LLM fallback)")
+		}
+		debit := strings.ToLower(amtM[2]) == "debited"
+		log.Debugf("axis_checking/A: rawAmt=%q rawDate=%q isDebit=%v merchant=%q", amtM[1], dateM[1], debit, merchantStr)
+		return merchantStr, dateM[1], amtM[1], debit, nil
 	}
-	dateM := axisChkDateRe.FindStringSubmatch(sms)
-	if dateM == nil {
-		log.Debugf("axis_checking: no date match — rawAmt=%q; pattern expects DD-MM-YY", amtM[1])
-		return "", "", "", false, fmt.Errorf("axis_checking: no date")
+
+	// Format B: "Debit INR X\nAxis Bank A/c XX...\nDD-MM-YY HH:MM:SS\nMerchant line\n..."
+	if amtM := axisChkAmtReB.FindStringSubmatch(sms); amtM != nil {
+		debit := strings.EqualFold(amtM[1], "Debit")
+		lines := strings.Split(strings.TrimSpace(sms), "\n")
+		merchantStr := ""
+		for i, line := range lines {
+			if m := axisDateLineRe.FindStringSubmatch(strings.TrimSpace(line)); m != nil {
+				rawDate = m[1]
+				if i+1 < len(lines) {
+					merchantStr = strings.TrimSpace(lines[i+1])
+				}
+				break
+			}
+		}
+		if rawDate == "" {
+			log.Debugf("axis_checking: format B no date found — rawAmt=%q", amtM[2])
+			return "", "", "", false, fmt.Errorf("axis_checking: no date in format B")
+		}
+		log.Debugf("axis_checking/B: rawAmt=%q rawDate=%q isDebit=%v merchant=%q", amtM[2], rawDate, debit, merchantStr)
+		return merchantStr, rawDate, amtM[2], debit, nil
 	}
-	merchantStr := ""
-	if upiM := axisChkUPIRe.FindStringSubmatch(sms); upiM != nil {
-		merchantStr = extractUPIMerchant(upiM[1])
-		log.Debugf("axis_checking: UPI ref=%q → merchant=%q", upiM[1], merchantStr)
-	} else {
-		log.Debugf("axis_checking: no UPI ref found — merchant will be empty (LLM fallback)")
-	}
-	debit := strings.ToLower(amtM[2]) == "debited"
-	log.Debugf("axis_checking: rawAmt=%q rawDate=%q isDebit=%v merchant=%q", amtM[1], dateM[1], debit, merchantStr)
-	return merchantStr, dateM[1], amtM[1], debit, nil
+
+	log.Debugf("axis_checking: no match — format A expects 'INR <amt> debited/credited', format B expects 'Debit/Credit INR <amt>'")
+	return "", "", "", false, fmt.Errorf("axis_checking: no match")
 }
 
 // extractUPIMerchant returns the human-readable part after the numeric reference ID.
@@ -141,6 +165,22 @@ func ExtractAxisCC(sms string) (merchant, rawDate, rawAmt string, isDebit bool, 
 	merchantStr := strings.TrimSpace(lines[merchantLineIdx])
 	log.Debugf("axis_cc: rawAmt=%q rawDate=%q merchant=%q", amtM[1], rawDate, merchantStr)
 	return merchantStr, rawDate, amtM[1], true, nil
+}
+
+// ── Axis Bank UPI Debit ──────────────────────────────────────────────────────
+// "Your A/c has been debited towards NETFLIX for INR 649.00 on 22-06-26. UPI_ID@okaxis - Axis Bank"
+
+var axisUPIRe = regexp.MustCompile(
+	`(?i)Your A/c has been debited towards (.+?) for INR\s*([\d,]+(?:\.\d{1,2})?) on (\d{2}-\d{2}-\d{2})`)
+
+func ExtractAxisUPI(sms string) (merchant, rawDate, rawAmt string, isDebit bool, err error) {
+	m := axisUPIRe.FindStringSubmatch(sms)
+	if m == nil {
+		log.Debugf("axis_upi: no match — pattern expects 'Your A/c has been debited towards <merchant> for INR <amt> on DD-MM-YY'")
+		return "", "", "", false, fmt.Errorf("axis_upi: no match")
+	}
+	log.Debugf("axis_upi: merchant=%q rawAmt=%q rawDate=%q", strings.TrimSpace(m[1]), m[2], m[3])
+	return strings.TrimSpace(m[1]), m[3], m[2], true, nil
 }
 
 // ── IDFC FIRST Bank Checking ─────────────────────────────────────────────────
