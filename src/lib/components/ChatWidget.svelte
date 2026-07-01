@@ -40,7 +40,7 @@
       } else if (res.status === 502) {
         replyText = "⚠️ paisa-agent is not running. Start it to use the assistant.";
       } else if (res.status === 422) {
-        replyText = "⚠️ Couldn't understand that — try rephrasing, e.g. \"food spend this month\"";
+        replyText = '⚠️ Couldn\'t understand that — try rephrasing, e.g. "food spend this month"';
       } else {
         replyText = data.error ?? "⚠️ Something went wrong.";
       }
@@ -66,11 +66,7 @@
 </script>
 
 <!-- FAB -->
-<button
-  class="chat-fab"
-  aria-label="Finance assistant"
-  on:click={() => (open = !open)}
->
+<button class="chat-fab" aria-label="Finance assistant" on:click={() => (open = !open)}>
   <span class="icon"><i class="fas {open ? 'fa-times' : 'fa-comment-dots'}" /></span>
 </button>
 
@@ -81,7 +77,12 @@
     <div class="chat-popup-header">
       <span class="has-text-weight-semibold">💬 Assistant</span>
       <div class="chat-popup-header-actions">
-        <a href="/assistant" class="has-text-white" title="Open full page" on:click={() => (open = false)}>
+        <a
+          href="/assistant"
+          class="has-text-white"
+          title="Open full page"
+          on:click={() => (open = false)}
+        >
           <span class="icon is-small"><i class="fas fa-up-right-from-square" /></span>
         </a>
         <button class="delete is-small" on:click={() => (open = false)} aria-label="Close" />
@@ -91,10 +92,14 @@
     <!-- Thread -->
     <div class="chat-thread" bind:this={threadEl}>
       {#if visibleMessages.length === 0}
-        <p class="chat-hint">Ask anything about your finances — spending, net worth, account balances, budget status.</p>
+        <p class="chat-hint">
+          Ask anything about your finances — spending, net worth, account balances, budget status.
+        </p>
       {/if}
       {#each visibleMessages as msg (msg.id)}
-        <div class="chat-bubble {msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-assistant'}">
+        <div
+          class="chat-bubble {msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-assistant'}"
+        >
           {msg.text}
         </div>
       {/each}
@@ -114,7 +119,11 @@
         placeholder="Ask anything…"
         disabled={loading}
       />
-      <button class="button is-primary is-small" on:click={send} disabled={loading || !input.trim()}>
+      <button
+        class="button is-primary is-small"
+        on:click={send}
+        disabled={loading || !input.trim()}
+      >
         <span class="icon is-small"><i class="fas fa-paper-plane" /></span>
       </button>
     </div>
@@ -141,7 +150,9 @@
     font-size: 1.1rem;
     transition: background 0.15s;
   }
-  .chat-fab:hover { background: #2160c4; }
+  .chat-fab:hover {
+    background: #2160c4;
+  }
 
   .chat-popup {
     position: fixed;
@@ -174,8 +185,12 @@
     align-items: center;
     gap: 0.5rem;
   }
-  .chat-popup-header-actions .delete { background: rgba(255,255,255,0.3); }
-  .chat-popup-header-actions .delete:hover { background: rgba(255,255,255,0.5); }
+  .chat-popup-header-actions .delete {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  .chat-popup-header-actions .delete:hover {
+    background: rgba(255, 255, 255, 0.5);
+  }
 
   .chat-thread {
     flex: 1;
@@ -221,9 +236,22 @@
     margin: 0 1px;
     font-size: 0.6rem;
   }
-  .chat-typing span:nth-child(2) { animation-delay: 0.2s; }
-  .chat-typing span:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes blink { 0%,80%,100% { opacity: 0.2; } 40% { opacity: 1; } }
+  .chat-typing span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+  .chat-typing span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+  @keyframes blink {
+    0%,
+    80%,
+    100% {
+      opacity: 0.2;
+    }
+    40% {
+      opacity: 1;
+    }
+  }
 
   .chat-input-row {
     display: flex;
@@ -232,8 +260,12 @@
     border-top: 1px solid #ededed;
     flex-shrink: 0;
   }
-  .chat-input-row .input { border-radius: 1rem; }
-  .chat-input-row .button { border-radius: 1rem; }
+  .chat-input-row .input {
+    border-radius: 1rem;
+  }
+  .chat-input-row .button {
+    border-radius: 1rem;
+  }
 
   /* dark theme overrides */
   .chat-popup.dark {
@@ -241,11 +273,17 @@
     border-color: hsl(215, 18%, 27%);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
   }
-  .chat-popup.dark .chat-thread { background: hsl(215, 18%, 13%); }
+  .chat-popup.dark .chat-thread {
+    background: hsl(215, 18%, 13%);
+  }
   .chat-popup.dark .chat-bubble-assistant {
     background: hsl(215, 18%, 20%);
     color: hsl(0, 0%, 90%);
   }
-  .chat-popup.dark .chat-hint { color: hsl(0, 0%, 48%); }
-  .chat-popup.dark .chat-input-row { border-top-color: hsl(215, 18%, 27%); }
+  .chat-popup.dark .chat-hint {
+    color: hsl(0, 0%, 48%);
+  }
+  .chat-popup.dark .chat-input-row {
+    border-top-color: hsl(215, 18%, 27%);
+  }
 </style>
