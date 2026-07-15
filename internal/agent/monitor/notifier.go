@@ -52,19 +52,33 @@ func (n *Notifier) FlushDigest() error {
 	if len(queue) == 0 {
 		return nil
 	}
+
+	// Group by monitor, preserving first-appearance order
+	order := []string{}
+	groups := make(map[string][]QueuedInsight)
+	seen := make(map[string]bool)
+
+	for _, q := range queue {
+		if !seen[q.Monitor] {
+			seen[q.Monitor] = true
+			order = append(order, q.Monitor)
+		}
+		groups[q.Monitor] = append(groups[q.Monitor], q)
+	}
+
+	// Render grouped message
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "🌅 Daily digest — %d insights\n", len(queue))
-	current := ""
-	for _, q := range queue {
-		if q.Monitor != current {
-			current = q.Monitor
-			fmt.Fprintf(&sb, "\n%s:\n", current)
-		}
-		fmt.Fprintf(&sb, "• %s\n", q.Title)
-		if q.Body != "" {
-			fmt.Fprintf(&sb, "  %s\n", q.Body)
+	for _, monitor := range order {
+		fmt.Fprintf(&sb, "\n%s:\n", monitor)
+		for _, q := range groups[monitor] {
+			fmt.Fprintf(&sb, "• %s\n", q.Title)
+			if q.Body != "" {
+				fmt.Fprintf(&sb, "  %s\n", q.Body)
+			}
 		}
 	}
+
 	if err := n.bot.SendText(sb.String()); err != nil {
 		return err
 	}

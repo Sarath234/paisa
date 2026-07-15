@@ -113,3 +113,50 @@ func TestFlushDigestFailureKeepsQueue(t *testing.T) {
 		t.Fatal("queue must be retained on failure")
 	}
 }
+
+func TestFlushDigestGroupsNonContiguousMonitors(t *testing.T) {
+	bot := &fakeSender{}
+	store := newTestStore(t)
+	n := NewNotifier(bot, store)
+
+	// Deliver in order: monitor "a" (key a1), monitor "b" (key b1), monitor "a" again (key a2)
+	n.Deliver("a", []Insight{{Key: "a1", Urgency: Digest, Title: "Alert A1"}})
+	n.Deliver("b", []Insight{{Key: "b1", Urgency: Digest, Title: "Alert B1"}})
+	n.Deliver("a", []Insight{{Key: "a2", Urgency: Digest, Title: "Alert A2"}})
+
+	if err := n.FlushDigest(); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(bot.sent) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(bot.sent))
+	}
+
+	msg := bot.sent[0]
+
+	// Assert exactly one "a:" section header
+	aCount := strings.Count(msg, "\na:\n")
+	if aCount != 1 {
+		t.Errorf("expected 1 'a:' section, got %d:\n%s", aCount, msg)
+	}
+
+	// Assert total says "3 insights"
+	if !strings.Contains(msg, "3 insights") {
+		t.Errorf("expected '3 insights' in message:\n%s", msg)
+	}
+
+	// Assert both a-titles appear
+	if !strings.Contains(msg, "Alert A1") || !strings.Contains(msg, "Alert A2") {
+		t.Errorf("both a-titles should appear:\n%s", msg)
+	}
+
+	// Assert b-title appears
+	if !strings.Contains(msg, "Alert B1") {
+		t.Errorf("b-title should appear:\n%s", msg)
+	}
+
+	// Assert queue is drained
+	if len(store.DigestQueue()) != 0 {
+		t.Error("queue should drain after flush")
+	}
+}
