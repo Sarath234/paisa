@@ -8,11 +8,13 @@ import (
 )
 
 type Config struct {
-	Paisa       PaisaConfig    `yaml:"paisa"`
-	Ollama      OllamaConfig   `yaml:"ollama"`
-	Telegram    TelegramConfig `yaml:"telegram"`
-	ParserRules ParserRules    `yaml:"parser_rules"`
-	Gmail       *GmailConfig   `yaml:"gmail,omitempty"`
+	Paisa       PaisaConfig       `yaml:"paisa"`
+	Ollama      OllamaConfig      `yaml:"ollama"`
+	Telegram    TelegramConfig    `yaml:"telegram"`
+	ParserRules ParserRules       `yaml:"parser_rules"`
+	Gmail       *GmailConfig      `yaml:"gmail,omitempty"`
+	Monitors    *MonitorsConfig   `yaml:"monitors,omitempty"`
+	Statements  *StatementsConfig `yaml:"statements,omitempty"`
 }
 
 type PaisaConfig struct {
@@ -66,6 +68,42 @@ type StatementAccount struct {
 	LedgerAccount string `yaml:"ledger_account"`
 }
 
+type MonitorsConfig struct {
+	DigestHour  int                      `yaml:"digest_hour"`
+	CreditCards CreditCardsMonitorConfig `yaml:"credit_cards"`
+}
+
+type CreditCardsMonitorConfig struct {
+	DueReminderDays  []int    `yaml:"due_reminder_days"`
+	UtilizationBands []int    `yaml:"utilization_bands"`
+	InterestPatterns []string `yaml:"interest_patterns"`
+}
+
+type StatementsConfig struct {
+	DropDir  string              `yaml:"drop_dir"`
+	Accounts []DropfolderAccount `yaml:"accounts"`
+}
+
+type DropfolderAccount struct {
+	FilenameMatch string `yaml:"filename_match"`
+	LedgerAccount string `yaml:"ledger_account"`
+}
+
+func (m *MonitorsConfig) setDefaults() {
+	if m.DigestHour == 0 {
+		m.DigestHour = 8
+	}
+	if len(m.CreditCards.DueReminderDays) == 0 {
+		m.CreditCards.DueReminderDays = []int{3, 1, 0}
+	}
+	if len(m.CreditCards.UtilizationBands) == 0 {
+		m.CreditCards.UtilizationBands = []int{50, 75, 90}
+	}
+	if len(m.CreditCards.InterestPatterns) == 0 {
+		m.CreditCards.InterestPatterns = []string{"INTEREST", "LATE FEE"}
+	}
+}
+
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -74,6 +112,9 @@ func Load(path string) (*Config, error) {
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
+	}
+	if cfg.Monitors != nil {
+		cfg.Monitors.setDefaults()
 	}
 	return &cfg, nil
 }
