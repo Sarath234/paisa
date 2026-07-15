@@ -126,3 +126,31 @@ func (c *Client) Postings() ([]Posting, error) {
 	}
 	return r.Postings, nil
 }
+
+type CreditCardBill struct {
+	StatementStartDate time.Time  `json:"statementStartDate"`
+	StatementEndDate   time.Time  `json:"statementEndDate"`
+	DueDate            time.Time  `json:"dueDate"`
+	PaidDate           *time.Time `json:"paidDate"`
+	ClosingBalance     float64    `json:"closingBalance"`
+	Postings           []Posting  `json:"postings"`
+}
+
+type CreditCardSummary struct {
+	Account     string           `json:"account"`
+	Balance     float64          `json:"balance"`
+	CreditLimit float64          `json:"creditLimit"`
+	Bills       []CreditCardBill `json:"bills"`
+}
+
+// CreditCards returns configured credit cards with computed statement bills
+// (GET /api/credit_cards).
+func (c *Client) CreditCards() ([]CreditCardSummary, error) {
+	var r struct {
+		CreditCards []CreditCardSummary `json:"creditCards"`
+	}
+	if err := c.get("/api/credit_cards", &r); err != nil {
+		return nil, err
+	}
+	return r.CreditCards, nil
+}

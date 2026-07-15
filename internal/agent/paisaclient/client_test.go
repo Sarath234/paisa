@@ -2,6 +2,7 @@
 package paisaclient
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -128,5 +129,45 @@ func TestDecodeError(t *testing.T) {
 	_, err := New(srv.URL).Expenses()
 	if err == nil || !strings.Contains(err.Error(), "decode") {
 		t.Fatalf("want decode error, got %v", err)
+	}
+}
+
+func TestCreditCards(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/credit_cards" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		fmt.Fprint(w, `{"creditCards":[{
+			"account":"Liabilities:CreditCard:Axis",
+			"balance":23450.5,
+			"creditLimit":100000,
+			"bills":[{
+				"statementStartDate":"2026-06-16T00:00:00+05:30",
+				"statementEndDate":"2026-07-15T00:00:00+05:30",
+				"dueDate":"2026-07-28T00:00:00+05:30",
+				"paidDate":null,
+				"closingBalance":31200,
+				"postings":[{"date":"2026-06-20T00:00:00+05:30","payee":"INTEREST CHARGE","account":"Liabilities:CreditCard:Axis","amount":-1240}]
+			}]
+		}]}`)
+	}))
+	defer srv.Close()
+
+	cards, err := New(srv.URL).CreditCards()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 1 || cards[0].Account != "Liabilities:CreditCard:Axis" {
+		t.Fatalf("cards: %+v", cards)
+	}
+	c := cards[0]
+	if c.Balance != 23450.5 || c.CreditLimit != 100000 {
+		t.Fatalf("balance/limit: %+v", c)
+	}
+	if len(c.Bills) != 1 || c.Bills[0].PaidDate != nil || c.Bills[0].ClosingBalance != 31200 {
+		t.Fatalf("bills: %+v", c.Bills)
+	}
+	if len(c.Bills[0].Postings) != 1 || c.Bills[0].Postings[0].Payee != "INTEREST CHARGE" {
+		t.Fatalf("postings: %+v", c.Bills[0].Postings)
 	}
 }
