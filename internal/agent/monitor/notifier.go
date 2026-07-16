@@ -68,7 +68,11 @@ func (n *Notifier) FlushDigest() error {
 
 	// Render grouped message
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "🌅 Daily digest — %d insights\n", len(queue))
+	noun := "insights"
+	if len(queue) == 1 {
+		noun = "insight"
+	}
+	fmt.Fprintf(&sb, "🌅 Daily digest — %d %s\n", len(queue), noun)
 	for _, monitor := range order {
 		fmt.Fprintf(&sb, "\n%s:\n", monitor)
 		for _, q := range groups[monitor] {

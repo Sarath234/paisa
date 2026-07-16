@@ -160,3 +160,20 @@ func TestFlushDigestGroupsNonContiguousMonitors(t *testing.T) {
 		t.Error("queue should drain after flush")
 	}
 }
+
+func TestFlushDigestSingularHeader(t *testing.T) {
+	bot := &fakeSender{}
+	store := newTestStore(t)
+	n := NewNotifier(bot, store)
+
+	n.Deliver("cc_statement", []Insight{{Key: "k1", Urgency: Digest, Title: "📄 Statement"}})
+	if err := n.FlushDigest(); err != nil {
+		t.Fatal(err)
+	}
+	if len(bot.sent) != 1 {
+		t.Fatalf("sent: %q", bot.sent)
+	}
+	if !strings.Contains(bot.sent[0], "1 insight\n") || strings.Contains(bot.sent[0], "1 insights") {
+		t.Errorf("digest header must pluralize correctly, got:\n%s", bot.sent[0])
+	}
+}
