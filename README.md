@@ -10,6 +10,19 @@ top of the [ledger](https://www.ledger-cli.org/) double entry accounting tool. C
 
 A demo of the Web UI can be found at [https://demo.paisa.fyi](https://demo.paisa.fyi)
 
+## Web UI additions (this fork)
+
+On top of upstream Paisa, this fork adds:
+
+- **Assistant page (`/assistant`) + chat widget:** Ask natural-language questions about your spending, budgets, balances, and net worth from the web UI — same Q&A engine the Telegram bot uses (requires paisa-agent running).
+- **Quick-entry modal:** Add a transaction from any page, with an SMS parse mode — paste a bank SMS, the agent parses it into a double-entry posting, and you approve before it's written to the journal.
+- **Global search:** Press `/` anywhere to search transactions and accounts.
+- **Net worth projection (`/assets/projection`):** Forward projection of net worth from historical trends.
+- **Rebalancing calculator:** On the allocation page — set target allocations and see the buy/sell amounts needed to rebalance.
+- **Spending insights feed (`/insights`):** Rule-based insights across budget, income, expenses, and savings rate.
+- **Theme switcher:** Light/dark toggle in the navbar.
+- **Performance:** Concurrent journal parse and price sync, dashboard cache pre-warming — noticeably faster cold starts and saves on large journals.
+
 ## paisa-agent
 
 A Go sidecar that connects Paisa to Telegram, Gmail, and a local LLM (via Ollama).
