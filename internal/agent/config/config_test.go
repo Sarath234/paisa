@@ -167,3 +167,30 @@ func TestLoadMonitorsDefaultDigestHour(t *testing.T) {
 		t.Fatalf("default due_reminder_days: got %v", got)
 	}
 }
+
+func TestLoadMonitorsDigestHourValidation(t *testing.T) {
+	cases := []struct {
+		hour    string
+		wantErr bool
+	}{
+		{"-1", true},
+		{"24", true},
+		{"23", false},
+		{"8", false},
+	}
+	for _, c := range cases {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "paisa-agent.yaml")
+		yaml := "paisa:\n  url: http://x\n  journal_dir: /tmp/j\nmonitors:\n  digest_hour: " + c.hour + "\n"
+		if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := config.Load(path)
+		if c.wantErr && err == nil {
+			t.Errorf("digest_hour=%s: want error, got nil", c.hour)
+		}
+		if !c.wantErr && err != nil {
+			t.Errorf("digest_hour=%s: unexpected error: %v", c.hour, err)
+		}
+	}
+}
