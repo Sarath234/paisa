@@ -48,54 +48,57 @@ func (m *CCDueMonitor) Check(ctx context.Context) ([]Insight, error) {
 	today := DateOnly(m.Now())
 	var insights []Insight
 	for _, card := range cards {
-		bill := latestUnpaidBill(card)
-		if bill == nil {
-			continue
-		}
-		days := int(DateOnly(bill.DueDate).Sub(today) / (24 * time.Hour))
-		dueDate := bill.DueDate.Format("2006-01-02")
-		if days < 0 {
-			insights = append(insights, Insight{
-				Key:     fmt.Sprintf("cc-due/%s/%s/overdue", card.Account, dueDate),
-				Urgency: Immediate,
-				Title: fmt.Sprintf("🚨 %s on %s is overdue (was due %s)",
-					INR(bill.ClosingBalance), Short(card.Account), bill.DueDate.Format("02 Jan")),
-			})
-			continue
-		}
-		offset := -1
-		for _, o := range m.reminderDays {
-			if o >= days {
-				offset = o
-				break
+		for _, bill := range closedUnpaidBills(card, today) {
+			days := int(DateOnly(bill.DueDate).Sub(today) / (24 * time.Hour))
+			dueDate := bill.DueDate.Format("2006-01-02")
+			if days < 0 {
+				insights = append(insights, Insight{
+					Key:     fmt.Sprintf("cc-due/%s/%s/overdue", card.Account, dueDate),
+					Urgency: Immediate,
+					Title: fmt.Sprintf("🚨 %s on %s is overdue (was due %s)",
+						INR(bill.ClosingBalance), Short(card.Account), bill.DueDate.Format("02 Jan")),
+				})
+				continue
 			}
+			offset := -1
+			for _, o := range m.reminderDays {
+				if o >= days {
+					offset = o
+					break
+				}
+			}
+			if offset < 0 {
+				continue
+			}
+			insights = append(insights, Insight{
+				Key:     fmt.Sprintf("cc-due/%s/%s/d-%d", card.Account, dueDate, offset),
+				Urgency: Immediate,
+				Title: fmt.Sprintf("💳 %s due on %s %s (%s)",
+					INR(bill.ClosingBalance), Short(card.Account), inDays(days), bill.DueDate.Format("02 Jan")),
+			})
 		}
-		if offset < 0 {
-			continue
-		}
-		insights = append(insights, Insight{
-			Key:     fmt.Sprintf("cc-due/%s/%s/d-%d", card.Account, dueDate, offset),
-			Urgency: Immediate,
-			Title: fmt.Sprintf("💳 %s due on %s %s (%s)",
-				INR(bill.ClosingBalance), Short(card.Account), inDays(days), bill.DueDate.Format("02 Jan")),
-		})
 	}
 	return insights, nil
 }
 
-// latestUnpaidBill returns the unpaid bill with the latest due date, or nil.
-func latestUnpaidBill(card paisaclient.CreditCardSummary) *paisaclient.CreditCardBill {
-	var latest *paisaclient.CreditCardBill
-	for i := range card.Bills {
-		b := &card.Bills[i]
+// closedUnpaidBills returns every bill whose statement period has closed
+// (StatementEndDate strictly before today, date-truncated) and is still
+// unpaid (PaidDate nil). Cards can carry more than one such bill at once —
+// e.g. a missed payment from a prior cycle plus the current statement — and
+// each must be reminded about independently; the open current cycle
+// (future StatementEndDate) is excluded since it isn't due yet.
+func closedUnpaidBills(card paisaclient.CreditCardSummary, today time.Time) []paisaclient.CreditCardBill {
+	var bills []paisaclient.CreditCardBill
+	for _, b := range card.Bills {
 		if b.PaidDate != nil {
 			continue
 		}
-		if latest == nil || b.DueDate.After(latest.DueDate) {
-			latest = b
+		if !today.After(DateOnly(b.StatementEndDate)) {
+			continue
 		}
+		bills = append(bills, b)
 	}
-	return latest
+	return bills
 }
 
 func inDays(days int) string {

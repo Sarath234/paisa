@@ -33,8 +33,8 @@ func (m *CCStatementMonitor) Check(ctx context.Context) ([]Insight, error) {
 	today := DateOnly(m.Now())
 	var insights []Insight
 	for _, card := range cards {
-		bill := latestBill(card)
-		if bill == nil || !today.After(DateOnly(bill.StatementEndDate)) {
+		bill := latestClosedBill(card, today)
+		if bill == nil {
 			continue
 		}
 		insights = append(insights, Insight{
@@ -48,11 +48,18 @@ func (m *CCStatementMonitor) Check(ctx context.Context) ([]Insight, error) {
 	return insights, nil
 }
 
-// latestBill returns the bill with the latest statement end date, or nil.
-func latestBill(card paisaclient.CreditCardSummary) *paisaclient.CreditCardBill {
+// latestClosedBill returns the bill with the max StatementEndDate strictly
+// before today (date-truncated), or nil. Cards in active use always carry a
+// current, still-open cycle (future StatementEndDate, PaidDate nil) alongside
+// closed ones — that open cycle must never be mistaken for the latest closed
+// statement, so bills are filtered to closed ones before taking the max.
+func latestClosedBill(card paisaclient.CreditCardSummary, today time.Time) *paisaclient.CreditCardBill {
 	var latest *paisaclient.CreditCardBill
 	for i := range card.Bills {
 		b := &card.Bills[i]
+		if !today.After(DateOnly(b.StatementEndDate)) {
+			continue
+		}
 		if latest == nil || b.StatementEndDate.After(latest.StatementEndDate) {
 			latest = b
 		}
