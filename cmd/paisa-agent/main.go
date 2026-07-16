@@ -12,9 +12,11 @@ import (
 
 	"github.com/ananthakumaran/paisa/internal/agent/approval"
 	"github.com/ananthakumaran/paisa/internal/agent/config"
+	"github.com/ananthakumaran/paisa/internal/agent/dropfolder"
 	"github.com/ananthakumaran/paisa/internal/agent/gmail"
 	agentledger "github.com/ananthakumaran/paisa/internal/agent/ledger"
 	"github.com/ananthakumaran/paisa/internal/agent/llm"
+	"github.com/ananthakumaran/paisa/internal/agent/monitor"
 	"github.com/ananthakumaran/paisa/internal/agent/paisaclient"
 	"github.com/ananthakumaran/paisa/internal/agent/qa"
 	"github.com/ananthakumaran/paisa/internal/agent/reconcile"
@@ -48,6 +50,9 @@ func main() {
 
 	bot := telegram.NewBot(cfg.Telegram.BotToken, cfg.Telegram.ChatID)
 
+	parsers := []statement.Parser{&statement.AxisParser{}}
+	pc := paisaclient.New(cfg.Paisa.URL)
+
 	var gmailClient *gmail.Client
 	var gmailPoller *gmail.Poller
 
@@ -58,8 +63,6 @@ func main() {
 			log.Fatalf("gmail: init: %v", err)
 		}
 
-		parsers := []statement.Parser{&statement.AxisParser{}}
-		pc := paisaclient.New(cfg.Paisa.URL)
 		stateDir := filepath.Dir(cfg.Gmail.TokenFile)
 
 		var subjectMatches []gmail.SubjectMatch
@@ -99,6 +102,45 @@ func main() {
 		} else {
 			go gmailPoller.Start()
 		}
+	}
+
+	if cfg.Statements != nil {
+		var matches []dropfolder.AccountMatch
+		for _, a := range cfg.Statements.Accounts {
+			matches = append(matches, dropfolder.AccountMatch{
+				Pattern:       a.FilenameMatch,
+				LedgerAccount: a.LedgerAccount,
+			})
+		}
+		dropPoller := dropfolder.New(cfg.Statements.DropDir, matches,
+			func(s dropfolder.Statement) error {
+				return handleStatement(s.Filename, s.PDFBytes, s.LedgerAccount, parsers, pc, cfg.Paisa.JournalDir, bot)
+			},
+			func(msg string) {
+				if err := bot.SendText(msg); err != nil {
+					log.Warnf("dropfolder: notify: %v", err)
+				}
+			})
+		go dropPoller.Start()
+		log.Infof("dropfolder: watching %s", cfg.Statements.DropDir)
+	}
+
+	if cfg.Monitors != nil {
+		monStore, err := monitor.OpenStore(cfg.Paisa.JournalDir)
+		if err != nil {
+			log.Fatalf("monitor: open store: %v", err)
+		}
+		cc := cfg.Monitors.CreditCards
+		hour := cfg.Monitors.DigestHour
+		mons := []monitor.Monitor{
+			monitor.NewCCDue(pc, cc.DueReminderDays, hour),
+			monitor.NewCCStatement(pc, hour),
+			monitor.NewCCUtilization(pc, cc.UtilizationBands, hour),
+			monitor.NewCCInterest(pc, cc.InterestPatterns, hour),
+		}
+		sched := monitor.NewScheduler(mons, monitor.NewNotifier(bot, monStore), monStore, hour)
+		go sched.Start()
+		log.Infof("monitor: scheduler started (%d monitors, digest at %02d:00)", len(mons), hour)
 	}
 
 	store := approval.NewStore()
