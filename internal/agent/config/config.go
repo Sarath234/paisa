@@ -3,6 +3,8 @@ package config
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -115,6 +117,13 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Monitors != nil {
 		cfg.Monitors.setDefaults()
+	}
+	if cfg.Statements != nil && strings.HasPrefix(cfg.Statements.DropDir, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		cfg.Statements.DropDir = filepath.Join(home, cfg.Statements.DropDir[2:])
 	}
 	return &cfg, nil
 }

@@ -78,6 +78,61 @@ statements:
 	}
 }
 
+func TestLoadStatementsDropDirTildeExpansion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "paisa-agent.yaml")
+	yaml := `
+paisa:
+  url: http://localhost:7500
+  journal_dir: /tmp/j
+telegram:
+  bot_token: x
+  chat_id: 1
+statements:
+  drop_dir: ~/Downloads/statements
+  accounts:
+    - filename_match: "*Axis*"
+      ledger_account: Liabilities:CreditCard:Axis
+`
+	if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, "Downloads/statements")
+	if cfg.Statements.DropDir != want {
+		t.Fatalf("drop_dir: got %q, want %q", cfg.Statements.DropDir, want)
+	}
+}
+
+func TestLoadStatementsDropDirNoTildeUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "paisa-agent.yaml")
+	yaml := `
+paisa:
+  url: http://localhost:7500
+  journal_dir: /tmp/j
+statements:
+  drop_dir: /absolute/path/statements
+`
+	if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Statements.DropDir != "/absolute/path/statements" {
+		t.Fatalf("drop_dir: got %q", cfg.Statements.DropDir)
+	}
+}
+
 func TestLoadMonitorsAbsent(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "paisa-agent.yaml")

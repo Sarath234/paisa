@@ -104,7 +104,9 @@ func main() {
 		}
 	}
 
-	if cfg.Statements != nil {
+	if cfg.Statements != nil && cfg.Statements.DropDir == "" {
+		log.Errorf("statements: drop_dir is empty — skipping drop-folder poller")
+	} else if cfg.Statements != nil {
 		var matches []dropfolder.AccountMatch
 		for _, a := range cfg.Statements.Accounts {
 			matches = append(matches, dropfolder.AccountMatch{
