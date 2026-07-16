@@ -144,16 +144,81 @@ func TestCCInterestListFetchErrorPropagates(t *testing.T) {
 	}
 }
 
-func TestCCInterestDetailFetchErrorPropagates(t *testing.T) {
+// TestCCInterestContinuesPastFailingCard: one card's detail fetch failing
+// must not abort the sweep — remaining cards are still checked and their
+// insights returned, with no error (the failed card's statement is monthly;
+// it is retried on the next daily run via the unsent dedupe key).
+func TestCCInterestContinuesPastFailingCard(t *testing.T) {
+	billA := paisaclient.CreditCardBill{StatementEndDate: day("2026-07-15")}
+	billB := paisaclient.CreditCardBill{
+		StatementEndDate: day("2026-07-15"),
+		Postings:         []paisaclient.Posting{{Payee: "INTEREST CHARGE", Amount: -900}},
+	}
+	cardB := paisaclient.CreditCardSummary{Account: "Liabilities:CreditCard:HDFC", Bills: []paisaclient.CreditCardBill{billB}}
 	f := &fakeFetcher{
-		cards:     []paisaclient.CreditCardSummary{{Account: "Liabilities:CreditCard:Axis"}},
-		detailErr: errors.New("paisa unreachable"),
+		cards: []paisaclient.CreditCardSummary{
+			{Account: "Liabilities:CreditCard:Axis", Bills: []paisaclient.CreditCardBill{billA}},
+			cardB,
+		},
+		detail:     map[string]*paisaclient.CreditCardSummary{cardB.Account: &cardB},
+		detailErrs: map[string]error{"Liabilities:CreditCard:Axis": errors.New("paisa unreachable")},
 	}
 	m := NewCCInterest(f, []string{"INTEREST"}, 8)
-	m.Now = func() time.Time { return day("2026-07-16") }
-	_, err := m.Check(context.Background())
-	if err == nil {
-		t.Fatal("want error, got nil")
+	m.Now = func() time.Time { return day("2026-07-16").Add(8 * time.Hour) }
+
+	insights, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatalf("per-card failure must not abort the sweep: %v", err)
+	}
+	if len(insights) != 1 || !strings.Contains(insights[0].Key, "HDFC") {
+		t.Fatalf("want the healthy card's insight, got %+v", insights)
+	}
+}
+
+// TestCCInterestSkipsDetailFetchWhenAlreadySent: the per-account detail call
+// is the expensive part (N+1 on the paisa server). Once a statement's
+// insight key has been sent, the monitor must not re-fetch that card's
+// detail on every subsequent run.
+func TestCCInterestSkipsDetailFetchWhenAlreadySent(t *testing.T) {
+	bill := paisaclient.CreditCardBill{
+		StatementEndDate: day("2026-07-15"),
+		Postings:         []paisaclient.Posting{{Payee: "INTEREST CHARGE", Amount: -100}},
+	}
+	f := fetcherWithDetail(cardWithBill(bill))
+	m := NewCCInterest(f, []string{"INTEREST"}, 8)
+	m.Now = func() time.Time { return day("2026-07-16").Add(8 * time.Hour) }
+	m.Sent = func(key string) bool { return key == "cc-interest/Liabilities:CreditCard:Axis/2026-07-15" }
+
+	insights, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(insights) != 0 {
+		t.Fatalf("want quiet for already-sent statement, got %+v", insights)
+	}
+	if f.detailCalls != 0 {
+		t.Fatalf("detail fetched %d times for an already-sent statement, want 0", f.detailCalls)
+	}
+}
+
+// TestCCInterestSkipsDetailFetchWithoutClosedBill: a card whose list entry
+// has no closed bill (e.g. brand new card, only the open cycle) needs no
+// detail call at all.
+func TestCCInterestSkipsDetailFetchWithoutClosedBill(t *testing.T) {
+	openBill := paisaclient.CreditCardBill{StatementEndDate: day("2026-08-15")}
+	f := fetcherWithDetail(cardWithBill(openBill))
+	m := NewCCInterest(f, []string{"INTEREST"}, 8)
+	m.Now = func() time.Time { return day("2026-07-16").Add(8 * time.Hour) }
+
+	insights, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(insights) != 0 {
+		t.Fatalf("want quiet, got %+v", insights)
+	}
+	if f.detailCalls != 0 {
+		t.Fatalf("detail fetched %d times for a card with no closed bill, want 0", f.detailCalls)
 	}
 }
 
