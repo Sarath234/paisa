@@ -171,3 +171,54 @@ func TestCreditCards(t *testing.T) {
 		t.Fatalf("postings: %+v", c.Bills[0].Postings)
 	}
 }
+
+func TestCreditCard(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/credit_cards/Liabilities:CreditCard:Axis" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		fmt.Fprint(w, `{"found":true,"creditCard":{
+			"account":"Liabilities:CreditCard:Axis",
+			"balance":23450.5,
+			"creditLimit":100000,
+			"bills":[{
+				"statementStartDate":"2026-06-16T00:00:00+05:30",
+				"statementEndDate":"2026-07-15T00:00:00+05:30",
+				"dueDate":"2026-07-28T00:00:00+05:30",
+				"paidDate":null,
+				"closingBalance":31200,
+				"postings":[{"date":"2026-06-20T00:00:00+05:30","payee":"INTEREST CHARGE","account":"Liabilities:CreditCard:Axis","amount":-1240}]
+			}]
+		}}`)
+	}))
+	defer srv.Close()
+
+	card, err := New(srv.URL).CreditCard("Liabilities:CreditCard:Axis")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if card == nil || card.Account != "Liabilities:CreditCard:Axis" {
+		t.Fatalf("card: %+v", card)
+	}
+	if len(card.Bills) != 1 || len(card.Bills[0].Postings) != 1 {
+		t.Fatalf("bills: %+v", card.Bills)
+	}
+	if card.Bills[0].Postings[0].Payee != "INTEREST CHARGE" {
+		t.Fatalf("posting: %+v", card.Bills[0].Postings[0])
+	}
+}
+
+func TestCreditCardNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"found":false}`)
+	}))
+	defer srv.Close()
+
+	card, err := New(srv.URL).CreditCard("Liabilities:CreditCard:Unknown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if card != nil {
+		t.Fatalf("want nil card, got %+v", card)
+	}
+}
