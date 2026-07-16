@@ -6,10 +6,17 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
 const storeFile = "reconciliation.json"
+
+// storeMu serializes Write across goroutines: the Gmail poller and the
+// drop-folder poller can both call handleStatement concurrently, and a
+// read-modify-write race on reconciliation.json would silently drop one
+// writer's update.
+var storeMu sync.Mutex
 
 // Record is one reconciliation result, keyed by account+period.
 type Record struct {
@@ -20,6 +27,9 @@ type Record struct {
 
 // Write upserts rec into <journalDir>/reconciliation.json keyed by Period.
 func Write(journalDir string, rec Record) error {
+	storeMu.Lock()
+	defer storeMu.Unlock()
+
 	path := filepath.Join(journalDir, storeFile)
 	records, err := ReadAll(journalDir)
 	if err != nil {
