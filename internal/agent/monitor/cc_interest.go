@@ -6,19 +6,29 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"github.com/ananthakumaran/paisa/internal/agent/paisaclient"
 )
+
+// CreditCardDetailFetcher extends CreditCardFetcher with the per-account
+// detail call that includes bill postings. The list endpoint
+// (CreditCardFetcher.CreditCards) always returns bills with empty Postings.
+type CreditCardDetailFetcher interface {
+	CreditCardFetcher
+	CreditCard(account string) (*paisaclient.CreditCardSummary, error)
+}
 
 // CCInterestMonitor detects interest/fee charges in the most recent closed
 // statement by case-insensitive substring match on posting payees. Charges on
 // a liability account are negative; amounts are summed as absolute values.
 type CCInterestMonitor struct {
 	Now      func() time.Time
-	client   CreditCardFetcher
+	client   CreditCardDetailFetcher
 	patterns []string // uppercased at construction
 	due      func(now, lastRun time.Time) bool
 }
 
-func NewCCInterest(client CreditCardFetcher, patterns []string, digestHour int) *CCInterestMonitor {
+func NewCCInterest(client CreditCardDetailFetcher, patterns []string, digestHour int) *CCInterestMonitor {
 	upper := make([]string, len(patterns))
 	for i, p := range patterns {
 		upper[i] = strings.ToUpper(p)
@@ -31,6 +41,8 @@ func (m *CCInterestMonitor) Name() string { return "cc_interest" }
 func (m *CCInterestMonitor) Due(now, lastRun time.Time) bool { return m.due(now, lastRun) }
 
 func (m *CCInterestMonitor) Check(ctx context.Context) ([]Insight, error) {
+	// The list endpoint never includes postings, so it's only used to
+	// enumerate accounts; postings come from the per-account detail call.
 	cards, err := m.client.CreditCards()
 	if err != nil {
 		return nil, err
@@ -38,8 +50,15 @@ func (m *CCInterestMonitor) Check(ctx context.Context) ([]Insight, error) {
 	today := DateOnly(m.Now())
 	var insights []Insight
 	for _, card := range cards {
-		bill := latestBill(card)
-		if bill == nil || !today.After(DateOnly(bill.StatementEndDate)) {
+		detail, err := m.client.CreditCard(card.Account)
+		if err != nil {
+			return nil, err
+		}
+		if detail == nil {
+			continue // not found (e.g. removed from config since the list call)
+		}
+		bill := latestClosedBill(*detail, today)
+		if bill == nil {
 			continue
 		}
 		var total float64
