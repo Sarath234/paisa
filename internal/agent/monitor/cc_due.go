@@ -49,6 +49,11 @@ func (m *CCDueMonitor) Check(ctx context.Context) ([]Insight, error) {
 	var insights []Insight
 	for _, card := range cards {
 		for _, bill := range closedUnpaidBills(card, today) {
+			// Both operands are midnights in the same location, so in
+			// any fixed-offset timezone (IST included) the difference
+			// is an exact multiple of 24h. A DST transition inside the
+			// window would skew it by an hour and truncate the count
+			// by a day — acceptable for reminder bucketing.
 			days := int(DateOnly(bill.DueDate).Sub(today) / (24 * time.Hour))
 			dueDate := bill.DueDate.Format("2006-01-02")
 			if days < 0 {

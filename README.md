@@ -19,7 +19,8 @@ A Go sidecar that connects Paisa to Telegram, Gmail, and a local LLM (via Ollama
 - **SMS → Ledger:** Forwards bank transaction SMSes from Telegram, parses them with regex + LLM fallback, and appends double-entry journal entries after user confirmation.
 - **Merchant rule learning:** Proposes and saves merchant routing rules when you correct a categorisation; editable via Telegram inline buttons.
 - **Finance Q&A:** Answer natural-language questions about your spending, net worth, budgets, and balances directly from Telegram.
-- **Statement reconciliation:** Polls Gmail for bank statement emails, parses the PDF, compares transactions against your ledger, and sends a Telegram report highlighting missing or extra entries. Results also surface on the Paisa doctor page (`/more/doctor`).
+- **Statement reconciliation:** Polls Gmail for bank statement emails, parses the PDF, compares transactions against your ledger, and sends a Telegram report highlighting missing or extra entries. Results also surface on the Paisa doctor page (`/more/doctor`). Statements can also be dropped as PDFs into a local folder (see `statements:` below) instead of, or alongside, Gmail.
+- **Credit card monitors:** Scheduled checks that message you on Telegram — due-date reminders (with overdue escalation), statement-generated announcements, credit utilization warnings, and interest/late-fee detection on closed statements. Each insight is sent at most once; low-urgency ones batch into a daily digest.
 
 **Config:** Copy `paisa-agent.yaml` to your preferred location and fill in:
 - `paisa.url` and `paisa.journal_dir`
@@ -57,6 +58,35 @@ A Go sidecar that connects Paisa to Telegram, Gmail, and a local LLM (via Ollama
    ```
 4. Start the agent. On first run it sends you an OAuth URL via Telegram and starts a local server on `:8787` to capture the redirect. Open the URL in a browser, approve access, and the agent saves a refresh token automatically.
 5. Subsequent restarts load the saved token silently — no re-auth needed.
+
+### Monitors (credit card guardian)
+
+Add a `monitors:` block to enable the scheduled checks. All fields are optional — an empty `monitors: {}` enables everything with the defaults shown:
+
+```yaml
+monitors:
+  digest_hour: 8            # hour (0-23, local time) the daily digest and daily checks fire
+  credit_cards:
+    due_reminder_days: [3, 1, 0]     # days before the due date to remind (0 = on the day)
+    utilization_bands: [50, 75, 90]  # warn when utilization crosses these percentages
+    interest_patterns: ["INTEREST", "LATE FEE"]  # payee substrings that count as interest/fees
+```
+
+Credit cards themselves are configured in Paisa (`paisa.yaml` → `credit_cards:`); the monitors read them via the Paisa API. Monitor state (dedupe keys, digest queue) is stored as `monitor-state.json` in `paisa.journal_dir`.
+
+### Statement drop folder
+
+As an alternative to Gmail polling, drop statement PDFs into a watched folder:
+
+```yaml
+statements:
+  drop_dir: "~/paisa-statements"     # watched for new *.pdf files (checked every minute)
+  accounts:
+    - filename_match: "*6386*"       # case-insensitive glob matched against the file name
+      ledger_account: "Assets:Checking:AXIS6386"
+```
+
+Matched PDFs are parsed and reconciled exactly like Gmail statements. Processed files move to `<drop_dir>/processed/`; unmatched or unparseable files move to `<drop_dir>/failed/` with a Telegram notification.
 
 ## Status
 
