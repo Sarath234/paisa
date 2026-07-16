@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -125,4 +126,51 @@ func (c *Client) Postings() ([]Posting, error) {
 		return nil, err
 	}
 	return r.Postings, nil
+}
+
+type CreditCardBill struct {
+	StatementStartDate time.Time  `json:"statementStartDate"`
+	StatementEndDate   time.Time  `json:"statementEndDate"`
+	DueDate            time.Time  `json:"dueDate"`
+	PaidDate           *time.Time `json:"paidDate"`
+	ClosingBalance     float64    `json:"closingBalance"`
+	Postings           []Posting  `json:"postings"`
+}
+
+type CreditCardSummary struct {
+	Account     string           `json:"account"`
+	Balance     float64          `json:"balance"`
+	CreditLimit float64          `json:"creditLimit"`
+	Bills       []CreditCardBill `json:"bills"`
+}
+
+// CreditCards returns configured credit cards with computed statement bills.
+// Bills in this response have EMPTY Postings — the list endpoint omits them
+// for performance. Use CreditCard(account) to fetch bill postings for a
+// single card (GET /api/credit_cards).
+func (c *Client) CreditCards() ([]CreditCardSummary, error) {
+	var r struct {
+		CreditCards []CreditCardSummary `json:"creditCards"`
+	}
+	if err := c.get("/api/credit_cards", &r); err != nil {
+		return nil, err
+	}
+	return r.CreditCards, nil
+}
+
+// CreditCard returns one card's detail including bill postings
+// (GET /api/credit_cards/:account). Returns (nil, nil) when the account
+// isn't configured on the server.
+func (c *Client) CreditCard(account string) (*CreditCardSummary, error) {
+	var r struct {
+		CreditCard *CreditCardSummary `json:"creditCard"`
+		Found      bool               `json:"found"`
+	}
+	if err := c.get("/api/credit_cards/"+url.PathEscape(account), &r); err != nil {
+		return nil, err
+	}
+	if !r.Found {
+		return nil, nil
+	}
+	return r.CreditCard, nil
 }

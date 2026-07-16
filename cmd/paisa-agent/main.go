@@ -12,9 +12,11 @@ import (
 
 	"github.com/ananthakumaran/paisa/internal/agent/approval"
 	"github.com/ananthakumaran/paisa/internal/agent/config"
+	"github.com/ananthakumaran/paisa/internal/agent/dropfolder"
 	"github.com/ananthakumaran/paisa/internal/agent/gmail"
 	agentledger "github.com/ananthakumaran/paisa/internal/agent/ledger"
 	"github.com/ananthakumaran/paisa/internal/agent/llm"
+	"github.com/ananthakumaran/paisa/internal/agent/monitor"
 	"github.com/ananthakumaran/paisa/internal/agent/paisaclient"
 	"github.com/ananthakumaran/paisa/internal/agent/qa"
 	"github.com/ananthakumaran/paisa/internal/agent/reconcile"
@@ -48,6 +50,9 @@ func main() {
 
 	bot := telegram.NewBot(cfg.Telegram.BotToken, cfg.Telegram.ChatID)
 
+	parsers := []statement.Parser{&statement.AxisParser{}}
+	pc := paisaclient.New(cfg.Paisa.URL)
+
 	var gmailClient *gmail.Client
 	var gmailPoller *gmail.Poller
 
@@ -58,8 +63,6 @@ func main() {
 			log.Fatalf("gmail: init: %v", err)
 		}
 
-		parsers := []statement.Parser{&statement.AxisParser{}}
-		pc := paisaclient.New(cfg.Paisa.URL)
 		stateDir := filepath.Dir(cfg.Gmail.TokenFile)
 
 		var subjectMatches []gmail.SubjectMatch
@@ -71,7 +74,8 @@ func main() {
 		}
 
 		gmailPoller = gmail.NewPoller(gmailClient, subjectMatches, stateDir, func(ev gmail.StatementEmail) {
-			handleStatementEmail(ev, parsers, pc, cfg.Paisa.JournalDir, bot)
+			//nolint:errcheck // errors already reported via Telegram inside
+			handleStatement(ev.Subject, ev.PDFBytes, ev.LedgerAccount, parsers, pc, cfg.Paisa.JournalDir, bot)
 		})
 
 		if !gmailClient.IsAuthorized() {
@@ -98,6 +102,47 @@ func main() {
 		} else {
 			go gmailPoller.Start()
 		}
+	}
+
+	if cfg.Statements != nil && cfg.Statements.DropDir == "" {
+		log.Errorf("statements: drop_dir is empty — skipping drop-folder poller")
+	} else if cfg.Statements != nil {
+		var matches []dropfolder.AccountMatch
+		for _, a := range cfg.Statements.Accounts {
+			matches = append(matches, dropfolder.AccountMatch{
+				Pattern:       a.FilenameMatch,
+				LedgerAccount: a.LedgerAccount,
+			})
+		}
+		dropPoller := dropfolder.New(cfg.Statements.DropDir, matches,
+			func(s dropfolder.Statement) error {
+				return handleStatement(s.Filename, s.PDFBytes, s.LedgerAccount, parsers, pc, cfg.Paisa.JournalDir, bot)
+			},
+			func(msg string) {
+				if err := bot.SendText(msg); err != nil {
+					log.Warnf("dropfolder: notify: %v", err)
+				}
+			})
+		go dropPoller.Start()
+		log.Infof("dropfolder: watching %s", cfg.Statements.DropDir)
+	}
+
+	if cfg.Monitors != nil {
+		monStore, err := monitor.OpenStore(cfg.Paisa.JournalDir)
+		if err != nil {
+			log.Fatalf("monitor: open store: %v", err)
+		}
+		cc := cfg.Monitors.CreditCards
+		hour := cfg.Monitors.DigestHour
+		mons := []monitor.Monitor{
+			monitor.NewCCDue(pc, cc.DueReminderDays, hour),
+			monitor.NewCCStatement(pc, hour),
+			monitor.NewCCUtilization(pc, cc.UtilizationBands, hour),
+			monitor.NewCCInterest(pc, cc.InterestPatterns, hour),
+		}
+		sched := monitor.NewScheduler(mons, monitor.NewNotifier(bot, monStore), monStore, hour)
+		go sched.Start()
+		log.Infof("monitor: scheduler started (%d monitors, digest at %02d:00)", len(mons), hour)
 	}
 
 	store := approval.NewStore()
@@ -301,45 +346,52 @@ func handleRuleEditReply(chatID int64, text string, bot *telegram.Bot, ruleStore
 	log.Infof("rulelearning: rule updated and re-confirmed msgID=%d keyword=%q", msgID, updated.Keyword)
 }
 
-func handleStatementEmail(
-	ev gmail.StatementEmail,
+// handleStatement parses a statement PDF, reconciles it against the ledger,
+// stores the diff, and reports via Telegram. name is the email subject or
+// filename (parsers Detect on it). Returns an error when parsing or the
+// ledger fetch failed (callers use it for file disposition); reconciliation
+// store/report problems are logged, not returned.
+func handleStatement(
+	name string,
+	pdfBytes []byte,
+	ledgerAccount string,
 	parsers []statement.Parser,
 	pc *paisaclient.Client,
 	journalDir string,
 	bot *telegram.Bot,
-) {
+) error {
 	var result statement.ParseResult
 	var parsed bool
 	for _, p := range parsers {
-		if !p.Detect(ev.Subject) {
+		if !p.Detect(name) {
 			continue
 		}
-		r, err := p.Parse(ev.PDFBytes)
+		r, err := p.Parse(pdfBytes)
 		if err != nil {
 			log.Errorf("statement: parse %s: %v", p.Name(), err)
 			bot.SendText(fmt.Sprintf("❌ Failed to parse statement (%s): %v", p.Name(), err)) //nolint:errcheck
-			return
+			return fmt.Errorf("parse %s: %w", p.Name(), err)
 		}
 		result = r
 		parsed = true
 		break
 	}
 	if !parsed {
-		log.Warnf("statement: no parser matched subject=%q", ev.Subject)
-		bot.SendText(fmt.Sprintf("❌ No parser matched statement email: %q", ev.Subject)) //nolint:errcheck
-		return
+		log.Warnf("statement: no parser matched subject=%q", name)
+		bot.SendText(fmt.Sprintf("❌ No parser matched statement email: %q", name)) //nolint:errcheck
+		return fmt.Errorf("no parser matched %q", name)
 	}
 
 	postings, err := pc.Postings()
 	if err != nil {
 		log.Errorf("reconcile: fetch postings: %v", err)
-		bot.SendText(fmt.Sprintf("❌ Failed to fetch ledger for %s: %v", ev.LedgerAccount, err)) //nolint:errcheck
-		return
+		bot.SendText(fmt.Sprintf("❌ Failed to fetch ledger for %s: %v", ledgerAccount, err)) //nolint:errcheck
+		return fmt.Errorf("fetch postings: %w", err)
 	}
 
 	var entries []reconcile.LedgerEntry
 	for _, p := range postings {
-		if p.Account != ev.LedgerAccount {
+		if p.Account != ledgerAccount {
 			continue
 		}
 		if int(p.Date.Month()) != int(result.Month) || p.Date.Year() != result.Year {
@@ -353,7 +405,7 @@ func handleStatementEmail(
 	}
 
 	diff := reconcile.Compare(result, entries)
-	diff.Account = ev.LedgerAccount
+	diff.Account = ledgerAccount
 
 	rec := reconcile.Record{
 		Period:      fmt.Sprintf("%04d-%02d", result.Year, int(result.Month)),
@@ -366,7 +418,7 @@ func handleStatementEmail(
 
 	// Telegram report.
 	var sb strings.Builder
-	acctShort := ev.LedgerAccount
+	acctShort := ledgerAccount
 	if idx := strings.LastIndex(acctShort, ":"); idx >= 0 {
 		acctShort = acctShort[idx+1:]
 	}
@@ -398,6 +450,7 @@ func handleStatementEmail(
 	if err := bot.SendText(sb.String()); err != nil {
 		log.Errorf("reconcile: send Telegram report: %v", err)
 	}
+	return nil
 }
 
 func serveHTTP(cfg *config.Config, smsCap *sms.Capability, answerer *qa.Answerer) {
