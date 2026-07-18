@@ -7,7 +7,9 @@ import (
 	"github.com/ananthakumaran/paisa/internal/agent/paisaclient"
 )
 
-type fakeLister struct{ cards []paisaclient.CreditCardSummary }
+type fakeLister struct {
+	cards []paisaclient.CreditCardSummary
+}
 
 func (f *fakeLister) CreditCards() ([]paisaclient.CreditCardSummary, error) { return f.cards, nil }
 
