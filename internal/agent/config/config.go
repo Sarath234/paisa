@@ -80,6 +80,7 @@ type CreditCardsMonitorConfig struct {
 	DueReminderDays  []int    `yaml:"due_reminder_days"`
 	UtilizationBands []int    `yaml:"utilization_bands"`
 	InterestPatterns []string `yaml:"interest_patterns"`
+	TruthGapDays     int      `yaml:"truth_gap_days"`
 }
 
 type StatementsConfig struct {
@@ -97,6 +98,9 @@ type DropfolderAccount struct {
 func (m *MonitorsConfig) setDefaults() {
 	if m.DigestHour == 0 {
 		m.DigestHour = 8
+	}
+	if m.CreditCards.TruthGapDays == 0 {
+		m.CreditCards.TruthGapDays = 3
 	}
 	if len(m.CreditCards.DueReminderDays) == 0 {
 		m.CreditCards.DueReminderDays = []int{3, 1, 0}
@@ -122,6 +126,9 @@ func Load(path string) (*Config, error) {
 		cfg.Monitors.setDefaults()
 		if h := cfg.Monitors.DigestHour; h < 0 || h > 23 {
 			return nil, fmt.Errorf("monitors.digest_hour must be between 0 and 23, got %d", h)
+		}
+		if tg := cfg.Monitors.CreditCards.TruthGapDays; tg < 1 {
+			return nil, fmt.Errorf("monitors.credit_cards.truth_gap_days must be >= 1, got %d", tg)
 		}
 	}
 	if cfg.Statements != nil && strings.HasPrefix(cfg.Statements.DropDir, "~/") {

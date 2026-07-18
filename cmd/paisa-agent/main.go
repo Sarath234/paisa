@@ -157,6 +157,7 @@ func main() {
 			ccStatement,
 			monitor.NewCCUtilization(pc, cc.UtilizationBands, hour),
 			ccInterest,
+			monitor.NewCCTruthGap(truthStore, pc, cc.TruthGapDays, hour),
 		}
 		sched := monitor.NewScheduler(mons, monitor.NewNotifier(bot, monStore), monStore, hour)
 		go sched.Start()

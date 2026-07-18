@@ -221,3 +221,30 @@ func TestLoadMonitorsDigestHourValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadMonitorsTruthGapDaysValidation(t *testing.T) {
+	cases := []struct {
+		days    string
+		wantErr bool
+	}{
+		{"-1", true},
+		{"0", false}, // 0 means unset, defaults to 3
+		{"1", false},
+		{"3", false},
+	}
+	for _, c := range cases {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "paisa-agent.yaml")
+		yaml := "paisa:\n  url: http://x\n  journal_dir: /tmp/j\nmonitors:\n  credit_cards:\n    truth_gap_days: " + c.days + "\n"
+		if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := config.Load(path)
+		if c.wantErr && err == nil {
+			t.Errorf("truth_gap_days=%s: want error, got nil", c.days)
+		}
+		if !c.wantErr && err != nil {
+			t.Errorf("truth_gap_days=%s: unexpected error: %v", c.days, err)
+		}
+	}
+}
