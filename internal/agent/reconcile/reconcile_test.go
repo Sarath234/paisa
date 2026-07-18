@@ -91,10 +91,6 @@ func TestCompare_closingBalance(t *testing.T) {
 	}
 }
 
-func day(dateStr string) time.Time {
-	return date(2026, 7, 10) // placeholder; should parse dateStr
-}
-
 func ccTxn(date time.Time, desc string, debit, credit float64) statement.CCTransaction {
 	return statement.CCTransaction{Transaction: statement.Transaction{
 		Date: date, Description: desc, Debit: debit, Credit: credit,
@@ -143,6 +139,29 @@ func TestCompareCCAmbiguityConsumesClosest(t *testing.T) {
 	diff := CompareCC(res, ledger)
 	if len(diff.Missing) != 0 || len(diff.Extra) != 0 {
 		t.Fatalf("ambiguity must fully pair: %+v", diff)
+	}
+}
+
+func TestCompareCCOrderSensitiveStranding(t *testing.T) {
+	// Regression: closest-date greedy in statement-list order strands a
+	// pairable pair. Ledger X@day0, Y@day3; statement [A@day0, B@day-1].
+	// Naive closest-date: A grabs X (gap 0), B's only remaining candidate Y
+	// is gap 4 (outside ±3d) → false Missing B + false Extra Y. The valid
+	// full pairing is B↔X (gap 1), A↔Y (gap 3).
+	res := statement.CCResult{
+		PeriodEnd: date(2026, 7, 10),
+		Transactions: []statement.CCTransaction{
+			ccTxn(date(2026, 6, 10), "A", 100.00, 0), // day 0
+			ccTxn(date(2026, 6, 9), "B", 100.00, 0),  // day -1
+		},
+	}
+	ledger := []LedgerEntry{
+		{Date: date(2026, 6, 10), Description: "X", Amount: -100.00}, // day 0
+		{Date: date(2026, 6, 13), Description: "Y", Amount: -100.00}, // day 3
+	}
+	diff := CompareCC(res, ledger)
+	if len(diff.Missing) != 0 || len(diff.Extra) != 0 {
+		t.Fatalf("full pairing exists (B-X, A-Y); must not strand: %+v", diff)
 	}
 }
 
