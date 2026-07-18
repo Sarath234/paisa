@@ -26,6 +26,7 @@ type Diff struct {
 }
 
 const amountEpsilon = 0.01
+const ccDateWindowDays = 3
 
 // Compare matches statement transactions against ledger entries by date + |amount|.
 // A statement debit of 500 matches a ledger entry with Amount -500 on the same date.
@@ -65,6 +66,48 @@ func Compare(result statement.ParseResult, ledger []LedgerEntry) Diff {
 		}
 	}
 
+	return diff
+}
+
+// CompareCC matches CC statement transactions against ledger entries:
+// amount exact (±0.01) + date within ±3 days. Ambiguity (multiple candidates)
+// consumes the closest-date candidate — never yields a false "missing".
+func CompareCC(res statement.CCResult, ledger []LedgerEntry) Diff {
+	diff := Diff{
+		Month:          int(res.PeriodEnd.Month()),
+		Year:           res.PeriodEnd.Year(),
+		StatementClose: res.TotalDue,
+	}
+	used := make([]bool, len(ledger))
+	for _, tx := range res.Transactions {
+		txAmt := tx.Credit - tx.Debit
+		best, bestGap := -1, time.Duration(1<<62)
+		for i, le := range ledger {
+			if used[i] {
+				continue
+			}
+			if math.Abs(le.Amount-txAmt) > amountEpsilon {
+				continue
+			}
+			gap := le.Date.Sub(tx.Date)
+			if gap < 0 {
+				gap = -gap
+			}
+			if gap <= ccDateWindowDays*24*time.Hour && gap < bestGap {
+				best, bestGap = i, gap
+			}
+		}
+		if best >= 0 {
+			used[best] = true
+		} else {
+			diff.Missing = append(diff.Missing, tx.Transaction)
+		}
+	}
+	for i, le := range ledger {
+		if !used[i] {
+			diff.Extra = append(diff.Extra, le)
+		}
+	}
 	return diff
 }
 

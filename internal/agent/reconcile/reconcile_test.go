@@ -90,3 +90,70 @@ func TestCompare_closingBalance(t *testing.T) {
 		t.Errorf("StatementClose=%.2f want 12345.67", diff.StatementClose)
 	}
 }
+
+func day(dateStr string) time.Time {
+	return date(2026, 7, 10) // placeholder; should parse dateStr
+}
+
+func ccTxn(date time.Time, desc string, debit, credit float64) statement.CCTransaction {
+	return statement.CCTransaction{Transaction: statement.Transaction{
+		Date: date, Description: desc, Debit: debit, Credit: credit,
+	}}
+}
+
+func TestCompareCCDateWindow(t *testing.T) {
+	res := statement.CCResult{
+		PeriodEnd: date(2026, 6, 10), TotalDue: 5000,
+		Transactions: []statement.CCTransaction{ccTxn(date(2026, 6, 15), "SWIGGY", 450.50, 0)},
+	}
+	// ledger entry 2 days later (SMS ingest date drift) still matches
+	ledger := []LedgerEntry{{Date: date(2026, 6, 17), Description: "Food Swiggy", Amount: -450.50}}
+	diff := CompareCC(res, ledger)
+	if len(diff.Missing) != 0 || len(diff.Extra) != 0 {
+		t.Fatalf("±3d window must match: %+v", diff)
+	}
+}
+
+func TestCompareCCBeyondWindowIsMissing(t *testing.T) {
+	res := statement.CCResult{
+		PeriodEnd:    date(2026, 7, 10),
+		Transactions: []statement.CCTransaction{ccTxn(date(2026, 6, 15), "SWIGGY", 450.50, 0)},
+	}
+	ledger := []LedgerEntry{{Date: date(2026, 6, 20), Description: "x", Amount: -450.50}}
+	diff := CompareCC(res, ledger)
+	if len(diff.Missing) != 1 || len(diff.Extra) != 1 {
+		t.Fatalf("5 days apart: no match: %+v", diff)
+	}
+}
+
+func TestCompareCCAmbiguityConsumesClosest(t *testing.T) {
+	// two same-amount statement rows, two ledger entries: pairs resolve by
+	// closest date, nothing reported missing/extra
+	res := statement.CCResult{
+		PeriodEnd: date(2026, 7, 10),
+		Transactions: []statement.CCTransaction{
+			ccTxn(date(2026, 6, 15), "UBER", 240.00, 0),
+			ccTxn(date(2026, 6, 18), "UBER", 240.00, 0),
+		},
+	}
+	ledger := []LedgerEntry{
+		{Date: date(2026, 6, 15), Description: "u1", Amount: -240.00},
+		{Date: date(2026, 6, 19), Description: "u2", Amount: -240.00},
+	}
+	diff := CompareCC(res, ledger)
+	if len(diff.Missing) != 0 || len(diff.Extra) != 0 {
+		t.Fatalf("ambiguity must fully pair: %+v", diff)
+	}
+}
+
+func TestCompareCCPaymentCreditMatchesTransfer(t *testing.T) {
+	res := statement.CCResult{
+		PeriodEnd:    date(2026, 7, 10),
+		Transactions: []statement.CCTransaction{ccTxn(date(2026, 6, 25), "PAYMENT RECEIVED", 0, 15000.00)},
+	}
+	ledger := []LedgerEntry{{Date: date(2026, 6, 25), Description: "CC Payment", Amount: 15000.00}}
+	diff := CompareCC(res, ledger)
+	if len(diff.Missing) != 0 {
+		t.Fatalf("%+v", diff)
+	}
+}
