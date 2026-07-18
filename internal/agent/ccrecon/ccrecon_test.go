@@ -431,3 +431,68 @@ func TestHandleCCStatementExtraTruncationNoted(t *testing.T) {
 		t.Fatalf("summary must note truncated extras: %q", bot.texts[0])
 	}
 }
+
+// TestHandleCCStatementNextCycleSpendNotReportedAsExtra: postings are fetched
+// from a window widened by ±3d so near-boundary statement transactions still
+// match (see ccDateWindow). But that widened window also pulls in a
+// legitimate next-cycle spend dated periodEnd+2d that's already in the
+// ledger (posted before this statement's PDF even arrived) — CompareCC has
+// nothing in the statement to match it against, so it comes back Extra. That
+// must NOT become a "remove?" card, and must not be counted in the summary's
+// extra count: it's real spend from the NEXT cycle, not a duplicate.
+func TestHandleCCStatementNextCycleSpendNotReportedAsExtra(t *testing.T) {
+	store, _ := billtruth.Open(t.TempDir())
+	res := statement.CCResult{
+		Last4: "6009", PeriodStart: day("2026-06-11"), PeriodEnd: day("2026-07-10"),
+		DueDate: day("2026-07-30"), TotalDue: 1000,
+		// no statement transactions: nothing to match against
+	}
+	client := &fakeClient{postings: []paisaclient.Posting{
+		// periodEnd+2d: inside the ±3d fetch window, outside the statement period.
+		{Date: day("2026-07-12"), Account: cardAcct, Amount: -500.00, Payee: "Next Cycle Spend"},
+	}}
+	bot := &fakeBot{}
+	d := &Deps{Store: store, Parsers: map[string]statement.CCParser{"icici_cc": &stubParser{res: res}},
+		Client: client, Approvals: approval.NewStore(), Bot: bot,
+		JournalDir: t.TempDir(), MaxCards: 10}
+	if err := d.HandleCCStatement("stmt.pdf", []byte("%PDF"), cardAcct, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(bot.confirms) != 0 {
+		t.Fatalf("next-cycle spend must not raise a removal card: %v", bot.confirms)
+	}
+	if !strings.Contains(bot.texts[0], "0 extra") {
+		t.Fatalf("next-cycle spend must not be counted as extra: %q", bot.texts[0])
+	}
+}
+
+// TestHandleCCStatementExtraAtPeriodEndExactlyStillExtra: the boundary itself
+// (periodEnd, no offset) is inside the statement period and must still be
+// treated as a genuine extra (unmatched, in-period ledger entry).
+func TestHandleCCStatementExtraAtPeriodEndExactlyStillExtra(t *testing.T) {
+	store, _ := billtruth.Open(t.TempDir())
+	res := statement.CCResult{
+		Last4: "6009", PeriodStart: day("2026-06-11"), PeriodEnd: day("2026-07-10"),
+		DueDate: day("2026-07-30"), TotalDue: 1000,
+	}
+	client := &fakeClient{postings: []paisaclient.Posting{
+		{Date: day("2026-07-10"), Account: cardAcct, Amount: -500.00, Payee: "Boundary Dup"},
+	}}
+	journalDir := t.TempDir()
+	journal := "2026/07/10 Boundary Dup\n    " + cardAcct + "               -500.00 INR\n    Expenses:Food:Hyd\n"
+	os.WriteFile(filepath.Join(journalDir, "auto-import.ledger"), []byte(journal), 0644)
+
+	bot := &fakeBot{}
+	d := &Deps{Store: store, Parsers: map[string]statement.CCParser{"icici_cc": &stubParser{res: res}},
+		Client: client, Approvals: approval.NewStore(), Bot: bot,
+		JournalDir: journalDir, MaxCards: 10}
+	if err := d.HandleCCStatement("stmt.pdf", []byte("%PDF"), cardAcct, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(bot.confirms) != 1 {
+		t.Fatalf("periodEnd-exact extra must still raise a removal card: %v", bot.confirms)
+	}
+	if !strings.Contains(bot.texts[0], "1 extra") {
+		t.Fatalf("periodEnd-exact extra must be counted: %q", bot.texts[0])
+	}
+}

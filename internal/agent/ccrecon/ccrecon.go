@@ -181,6 +181,15 @@ func (d *Deps) HandleCCStatement(filename string, pdfBytes []byte, ledgerAccount
 	diff := reconcile.CompareCC(res, entries)
 	diff.Account = ledgerAccount
 
+	// CompareCC is handed postings from the widened [periodStart-3d,
+	// periodEnd+3d] window (see ccDateWindow above) so near-boundary
+	// statement transactions still match. But an unmatched ledger entry
+	// outside [periodStart, periodEnd] is real spend from the adjacent
+	// cycle that just happens to sit in the fetch window when the PDF
+	// drops — not a duplicate. Only unmatched entries within the actual
+	// statement period are genuine "in ledger, not in statement" extras.
+	diff.Extra = filterExtraToPeriod(diff.Extra, periodStart, periodEnd)
+
 	rec := reconcile.Record{
 		Period:      periodEnd.Format("2006-01"),
 		GeneratedAt: time.Now(),
@@ -338,6 +347,20 @@ func (d *Deps) HandleCallback(data string, messageID int) (bool, error) {
 	default:
 		return false, nil
 	}
+}
+
+// filterExtraToPeriod keeps only extras dated within [periodStart, periodEnd]
+// inclusive, dropping entries CompareCC only saw because of the widened
+// fetch window.
+func filterExtraToPeriod(extra []reconcile.LedgerEntry, periodStart, periodEnd time.Time) []reconcile.LedgerEntry {
+	var kept []reconcile.LedgerEntry
+	for _, le := range extra {
+		if le.Date.Before(periodStart) || le.Date.After(periodEnd) {
+			continue
+		}
+		kept = append(kept, le)
+	}
+	return kept
 }
 
 // shortAccount returns the last ":"-separated segment of a ledger account,
