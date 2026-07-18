@@ -46,6 +46,7 @@ func (s *Store) Apply(f Facts) ([]string, error) {
 	}
 
 	var changed []string
+	touched := false // a Sources entry was written (value change OR authority refresh)
 	setT := func(field string, cur *time.Time, val *time.Time) {
 		if val == nil {
 			return
@@ -58,6 +59,7 @@ func (s *Store) Apply(f Facts) ([]string, error) {
 			changed = append(changed, field)
 		}
 		bill.Sources[field] = f.Source
+		touched = true
 	}
 	setF := func(field string, cur *float64, val *float64) {
 		if val == nil {
@@ -71,6 +73,7 @@ func (s *Store) Apply(f Facts) ([]string, error) {
 			changed = append(changed, field)
 		}
 		bill.Sources[field] = f.Source
+		touched = true
 	}
 
 	setT("period_start", &bill.PeriodStart, f.PeriodStart)
@@ -86,12 +89,15 @@ func (s *Store) Apply(f Facts) ([]string, error) {
 				changed = append(changed, "paid_date")
 			}
 			bill.Sources["paid_date"] = f.Source
+			touched = true
 		}
 	}
 	setF("paid_amount", &bill.PaidAmount, f.PaidAmount)
 
 	if len(changed) > 0 {
 		bill.UpdatedAt = s.Now()
+	}
+	if touched {
 		if err := s.saveLocked(); err != nil {
 			return changed, err
 		}

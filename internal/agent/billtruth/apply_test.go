@@ -118,6 +118,36 @@ func TestPaymentAttachesToNewestUnpaidBill(t *testing.T) {
 	}
 }
 
+func TestAuthorityUpgradePersistsWhenValuesUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := Open(dir)
+	if _, err := s.Apply(smsFacts()); err != nil {
+		t.Fatal(err)
+	}
+	// PDF confirms the SMS values exactly: no field changes value, but the
+	// authority upgrade to pdf must still reach disk.
+	pdf := smsFacts()
+	pdf.Source = AuthorityPDF
+	changed, err := s.Apply(pdf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changed) != 0 {
+		t.Fatalf("identical values must report no changes: %v", changed)
+	}
+	s2, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bills := s2.BillsFor(acct)
+	if len(bills) != 1 {
+		t.Fatalf("bills after reload: %+v", bills)
+	}
+	if got := bills[0].Sources["total_due"]; got != AuthorityPDF {
+		t.Fatalf("authority upgrade lost on disk: total_due source = %d, want pdf", got)
+	}
+}
+
 func TestPaymentWithNoUnpaidBillIsIgnored(t *testing.T) {
 	s, _ := Open(t.TempDir())
 	changed, err := s.Apply(Facts{
