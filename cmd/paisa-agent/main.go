@@ -241,7 +241,7 @@ func main() {
 		for _, u := range updates {
 			switch {
 			case u.CallbackQuery != nil:
-				handleCallback(u.CallbackQuery, bot, store, ruleStore, cfg, *cfgPath)
+				handleCallback(u.CallbackQuery, bot, store, ruleStore, ccreconDeps, cfg, *cfgPath)
 			case u.Message != nil:
 				if u.Message.Chat.ID != cfg.Telegram.ChatID {
 					continue
@@ -279,6 +279,7 @@ func handleCallback(
 	bot *telegram.Bot,
 	store *approval.Store,
 	ruleStore *rulelearning.Store,
+	ccreconDeps *ccrecon.Deps,
 	cfg *config.Config,
 	cfgPath string,
 ) {
@@ -292,7 +293,15 @@ func handleCallback(
 	}
 	msgID := cb.Message.MessageID
 
-	switch strings.ToLower(cb.Data) {
+	data := strings.ToLower(cb.Data)
+	if handled, err := ccreconDeps.HandleCallback(data, msgID); handled {
+		if err != nil {
+			log.Errorf("ccrecon: handle callback %q: %v", data, err)
+		}
+		return
+	}
+
+	switch data {
 	case "approve":
 		pending := store.Get(msgID)
 		if pending == nil {

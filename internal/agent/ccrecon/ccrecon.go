@@ -7,11 +7,13 @@ package ccrecon
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/agent/approval"
 	"github.com/ananthakumaran/paisa/internal/agent/billtruth"
 	"github.com/ananthakumaran/paisa/internal/agent/config"
+	"github.com/ananthakumaran/paisa/internal/agent/journaledit"
 	"github.com/ananthakumaran/paisa/internal/agent/ledger"
 	"github.com/ananthakumaran/paisa/internal/agent/paisaclient"
 	"github.com/ananthakumaran/paisa/internal/agent/parser"
@@ -38,11 +40,19 @@ const ccDateWindow = 3 * 24 * time.Hour
 type Bot interface {
 	SendText(text string) error
 	SendDraft(text string) (int, error)
+
+	// SendConfirm sends a duplicate-removal confirmation card
+	// (✅ Remove / ❌ Keep) and returns the sent message's ID.
+	SendConfirm(text string) (int, error)
+
+	// EditMessage replaces the text of an existing message (removing its
+	// inline keyboard) — used to record the outcome of a ccdel/cckeep tap.
+	EditMessage(messageID int, text string) error
 }
 
-// PaisaClient is the subset of paisaclient.Client ccrecon needs. SyncJournal
-// isn't called by HandleCCStatement yet — it's here for the next task
-// (post-approval journal sync) so Deps.Client doesn't need to change shape.
+// PaisaClient is the subset of paisaclient.Client ccrecon needs.
+// HandleCCStatement doesn't call SyncJournal itself — HandleCallback does,
+// after a confirmed ("ccdel") duplicate removal rewrites the journal file.
 type PaisaClient interface {
 	Postings() ([]paisaclient.Posting, error)
 	SyncJournal() error
@@ -59,6 +69,32 @@ type Deps struct {
 	Merchants  []config.MerchantRule
 	JournalDir string
 	MaxCards   int // action cards per run, default 10
+
+	// mu guards pendingRemovals, which tracks duplicate-removal confirm
+	// cards awaiting a ccdel/cckeep tap. Zero-value Deps has a usable
+	// (nil) map — lazily allocated on first insert.
+	mu              sync.Mutex
+	pendingRemovals map[int]pendingRemoval
+}
+
+// pendingRemoval is the journal edit a ccdel tap on messageID will perform:
+// remove the exact block from file. Both fields come from a successful
+// journaledit.FindEntry call made when the confirm card was sent, so a
+// ccdel tap never has to re-derive (and possibly re-match) the target.
+type pendingRemoval struct {
+	block string
+	file  string
+}
+
+// setPendingRemoval records a pending duplicate-removal awaiting user
+// confirmation, keyed by the confirm card's Telegram message ID.
+func (d *Deps) setPendingRemoval(messageID int, p pendingRemoval) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.pendingRemovals == nil {
+		d.pendingRemovals = make(map[int]pendingRemoval)
+	}
+	d.pendingRemovals[messageID] = p
 }
 
 // HandleCCStatement decrypts (if needed), parses the statement PDF for
@@ -163,8 +199,48 @@ func (d *Deps) HandleCCStatement(filename string, pdfBytes []byte, ledgerAccount
 		summary += fmt.Sprintf(" (%d more)", len(shown)-maxCards)
 		shown = shown[:maxCards]
 	}
+
+	// Extra entries (in ledger, not in the statement — likely a duplicate
+	// posted some other way) share the same per-run card budget as missing
+	// entries. Each is only turned into a confirm card if journaledit can
+	// uniquely locate its journal block; ambiguous/not-found matches are
+	// reported in the summary instead of risking an edit against the wrong
+	// block, so the manual fix stays a manual fix.
+	extraBudget := maxCards - len(shown)
+	if extraBudget < 0 {
+		extraBudget = 0
+	}
+	shownExtra := diff.Extra
+	if len(shownExtra) > extraBudget {
+		shownExtra = shownExtra[:extraBudget]
+	}
+	type extraCard struct{ block, file string }
+	var extraCards []extraCard
+	var unlocatable int
+	for _, le := range shownExtra {
+		block, file, err := journaledit.FindEntry(d.JournalDir, le.Date, le.Amount, ledgerAccount)
+		if err != nil {
+			unlocatable++
+			continue
+		}
+		extraCards = append(extraCards, extraCard{block: block, file: file})
+	}
+	if unlocatable > 0 {
+		summary += fmt.Sprintf(" (%d extra unlocatable — fix manually)", unlocatable)
+	}
+
 	if err := d.Bot.SendText(summary); err != nil {
 		log.Errorf("ccrecon: send summary: %v", err)
+	}
+
+	for _, ec := range extraCards {
+		text := fmt.Sprintf("🗑 In ledger, not in statement — remove?\n\n%s", ec.block)
+		msgID, err := d.Bot.SendConfirm(text)
+		if err != nil {
+			log.Errorf("ccrecon: send confirm: %v", err)
+			continue
+		}
+		d.setPendingRemoval(msgID, pendingRemoval{block: ec.block, file: ec.file})
 	}
 
 	for _, tx := range shown {
@@ -202,6 +278,57 @@ func (d *Deps) HandleCCStatement(filename string, pdfBytes []byte, ledgerAccount
 func (d *Deps) reportErr(msg string) {
 	if err := d.Bot.SendText("❌ " + msg); err != nil {
 		log.Errorf("ccrecon: send error notice: %v", err)
+	}
+}
+
+// HandleCallback handles a "ccdel"/"cckeep" tap on a duplicate-removal
+// confirm card. It reports handled=false for any other callback data so
+// main.go's switch can keep its existing dispatch untouched.
+//
+// This is the only place the agent performs a destructive journal edit, and
+// it only fires for a messageID this run itself registered via
+// setPendingRemoval when the confirm card was sent — a stale or unknown
+// messageID (e.g. after a restart, or a duplicate callback delivery) is a
+// no-op, never a fallback edit against some other block.
+func (d *Deps) HandleCallback(data string, messageID int) (bool, error) {
+	switch data {
+	case "ccdel":
+		d.mu.Lock()
+		p, ok := d.pendingRemovals[messageID]
+		if ok {
+			delete(d.pendingRemovals, messageID)
+		}
+		d.mu.Unlock()
+		if !ok {
+			log.Debugf("ccrecon: ccdel callback for unknown messageID %d (stale/restarted)", messageID)
+			return true, nil
+		}
+		if err := journaledit.RemoveBlock(d.JournalDir, p.file, p.block); err != nil {
+			log.Errorf("ccrecon: remove block: %v", err)
+			if editErr := d.Bot.EditMessage(messageID, "❌ Failed to remove: "+err.Error()); editErr != nil {
+				log.Errorf("ccrecon: edit message: %v", editErr)
+			}
+			return true, err
+		}
+		if err := d.Client.SyncJournal(); err != nil {
+			log.Errorf("ccrecon: sync journal after remove: %v", err)
+		}
+		if err := d.Bot.EditMessage(messageID, "🗑 removed"); err != nil {
+			log.Errorf("ccrecon: edit message: %v", err)
+		}
+		return true, nil
+
+	case "cckeep":
+		d.mu.Lock()
+		delete(d.pendingRemovals, messageID)
+		d.mu.Unlock()
+		if err := d.Bot.EditMessage(messageID, "kept"); err != nil {
+			log.Errorf("ccrecon: edit message: %v", err)
+		}
+		return true, nil
+
+	default:
+		return false, nil
 	}
 }
 
