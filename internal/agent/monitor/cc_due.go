@@ -20,17 +20,17 @@ type CreditCardFetcher interface {
 // the message; the notifier's key dedupe drops already-sent buckets.
 type CCDueMonitor struct {
 	Now          func() time.Time
-	client       CreditCardFetcher
+	bills        BillSource
 	reminderDays []int // sorted ascending
 	due          func(now, lastRun time.Time) bool
 }
 
-func NewCCDue(client CreditCardFetcher, reminderDays []int, digestHour int) *CCDueMonitor {
+func NewCCDue(bills BillSource, reminderDays []int, digestHour int) *CCDueMonitor {
 	days := append([]int{}, reminderDays...)
 	sort.Ints(days)
 	return &CCDueMonitor{
 		Now:          time.Now,
-		client:       client,
+		bills:        bills,
 		reminderDays: days,
 		due:          DailyAt(digestHour),
 	}
@@ -41,14 +41,16 @@ func (m *CCDueMonitor) Name() string { return "cc_due" }
 func (m *CCDueMonitor) Due(now, lastRun time.Time) bool { return m.due(now, lastRun) }
 
 func (m *CCDueMonitor) Check(ctx context.Context) ([]Insight, error) {
-	cards, err := m.client.CreditCards()
-	if err != nil {
-		return nil, err
-	}
 	today := DateOnly(m.Now())
 	var insights []Insight
-	for _, card := range cards {
-		for _, bill := range closedUnpaidBills(card, today) {
+	for _, account := range m.bills.Accounts() {
+		for _, bill := range m.bills.BillsFor(account) {
+			if bill.PaidDate != nil || bill.DueDate.IsZero() || bill.TotalDue <= 0 {
+				continue
+			}
+			if !today.After(DateOnly(bill.PeriodEnd)) {
+				continue // period not closed yet (defensive; store holds closed bills)
+			}
 			// Both operands are midnights in the same location, so in
 			// any fixed-offset timezone (IST included) the difference
 			// is an exact multiple of 24h. A DST transition inside the
@@ -58,10 +60,10 @@ func (m *CCDueMonitor) Check(ctx context.Context) ([]Insight, error) {
 			dueDate := bill.DueDate.Format("2006-01-02")
 			if days < 0 {
 				insights = append(insights, Insight{
-					Key:     fmt.Sprintf("cc-due/%s/%s/overdue", card.Account, dueDate),
+					Key:     fmt.Sprintf("cc-due/%s/%s/overdue", account, dueDate),
 					Urgency: Immediate,
 					Title: fmt.Sprintf("🚨 %s on %s is overdue (was due %s)",
-						INR(bill.ClosingBalance), Short(card.Account), bill.DueDate.Format("02 Jan")),
+						INR(bill.TotalDue), Short(account), bill.DueDate.Format("02 Jan")),
 				})
 				continue
 			}
@@ -76,34 +78,14 @@ func (m *CCDueMonitor) Check(ctx context.Context) ([]Insight, error) {
 				continue
 			}
 			insights = append(insights, Insight{
-				Key:     fmt.Sprintf("cc-due/%s/%s/d-%d", card.Account, dueDate, offset),
+				Key:     fmt.Sprintf("cc-due/%s/%s/d-%d", account, dueDate, offset),
 				Urgency: Immediate,
 				Title: fmt.Sprintf("💳 %s due on %s %s (%s)",
-					INR(bill.ClosingBalance), Short(card.Account), inDays(days), bill.DueDate.Format("02 Jan")),
+					INR(bill.TotalDue), Short(account), inDays(days), bill.DueDate.Format("02 Jan")),
 			})
 		}
 	}
 	return insights, nil
-}
-
-// closedUnpaidBills returns every bill whose statement period has closed
-// (StatementEndDate strictly before today, date-truncated) and is still
-// unpaid (PaidDate nil). Cards can carry more than one such bill at once —
-// e.g. a missed payment from a prior cycle plus the current statement — and
-// each must be reminded about independently; the open current cycle
-// (future StatementEndDate) is excluded since it isn't due yet.
-func closedUnpaidBills(card paisaclient.CreditCardSummary, today time.Time) []paisaclient.CreditCardBill {
-	var bills []paisaclient.CreditCardBill
-	for _, b := range card.Bills {
-		if b.PaidDate != nil {
-			continue
-		}
-		if !today.After(DateOnly(b.StatementEndDate)) {
-			continue
-		}
-		bills = append(bills, b)
-	}
-	return bills
 }
 
 func inDays(days int) string {

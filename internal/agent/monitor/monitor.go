@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/ananthakumaran/paisa/internal/agent/billtruth"
 )
 
 type Urgency int
@@ -32,6 +34,14 @@ type Monitor interface {
 	Name() string
 	Due(now, lastRun time.Time) bool
 	Check(ctx context.Context) ([]Insight, error)
+}
+
+// BillSource is how monitors read truth-merged bill facts: *billtruth.Store
+// satisfies it directly. Monitors depend on this narrow seam instead of the
+// store type so tests can substitute fakes.
+type BillSource interface {
+	BillsFor(account string) []billtruth.Bill
+	Accounts() []string
 }
 
 // DailyAt returns a cadence that fires on the first check at/after hour

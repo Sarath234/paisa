@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -130,6 +131,11 @@ func main() {
 		log.Infof("dropfolder: watching %s", cfg.Statements.DropDir)
 	}
 
+	truthStore, err := billtruth.Open(cfg.Paisa.JournalDir)
+	if err != nil {
+		log.Fatalf("billtruth: open store: %v", err)
+	}
+
 	if cfg.Monitors != nil {
 		monStore, err := monitor.OpenStore(cfg.Paisa.JournalDir)
 		if err != nil {
@@ -140,7 +146,12 @@ func main() {
 		ccInterest := monitor.NewCCInterest(pc, cc.InterestPatterns, hour)
 		ccInterest.Sent = monStore.WasSent
 		mons := []monitor.Monitor{
-			monitor.NewCCDue(pc, cc.DueReminderDays, hour),
+			// apiSyncMonitor must run first each pass: it fills billtruth
+			// holes from paisa's computed bills before cc_due reads the
+			// store, so a card with no SMS/PDF facts yet still gets
+			// reminders.
+			&apiSyncMonitor{store: truthStore, client: pc, due: monitor.DailyAt(hour)},
+			monitor.NewCCDue(truthStore, cc.DueReminderDays, hour),
 			monitor.NewCCStatement(pc, hour),
 			monitor.NewCCUtilization(pc, cc.UtilizationBands, hour),
 			ccInterest,
@@ -148,11 +159,6 @@ func main() {
 		sched := monitor.NewScheduler(mons, monitor.NewNotifier(bot, monStore), monStore, hour)
 		go sched.Start()
 		log.Infof("monitor: scheduler started (%d monitors, digest at %02d:00)", len(mons), hour)
-	}
-
-	truthStore, err := billtruth.Open(cfg.Paisa.JournalDir)
-	if err != nil {
-		log.Fatalf("billtruth: open store: %v", err)
 	}
 
 	cardsByLast4 := map[string]string{}
@@ -221,6 +227,24 @@ func main() {
 			}
 		}
 	}
+}
+
+// apiSyncMonitor fills billtruth holes from paisa's computed bills
+// (fill-holes-only: never overwrites sms/pdf facts). It emits no insights of
+// its own; it must run before cc_due in the monitor slice so a card with no
+// SMS/PDF facts yet still has a bill for cc_due to read.
+type apiSyncMonitor struct {
+	store  *billtruth.Store
+	client billtruth.CreditCardLister
+	due    func(now, lastRun time.Time) bool
+}
+
+func (m *apiSyncMonitor) Name() string { return "billtruth_api_sync" }
+
+func (m *apiSyncMonitor) Due(now, lastRun time.Time) bool { return m.due(now, lastRun) }
+
+func (m *apiSyncMonitor) Check(ctx context.Context) ([]monitor.Insight, error) {
+	return nil, billtruth.SyncFromAPI(m.store, m.client)
 }
 
 func handleCallback(
