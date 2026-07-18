@@ -14,6 +14,7 @@ import (
 
 	"github.com/ananthakumaran/paisa/internal/agent/approval"
 	"github.com/ananthakumaran/paisa/internal/agent/billtruth"
+	"github.com/ananthakumaran/paisa/internal/agent/ccrecon"
 	"github.com/ananthakumaran/paisa/internal/agent/config"
 	"github.com/ananthakumaran/paisa/internal/agent/dropfolder"
 	"github.com/ananthakumaran/paisa/internal/agent/gmail"
@@ -56,6 +57,30 @@ func main() {
 
 	parsers := []statement.Parser{&statement.AxisParser{}}
 	pc := paisaclient.New(cfg.Paisa.URL)
+
+	truthStore, err := billtruth.Open(cfg.Paisa.JournalDir)
+	if err != nil {
+		log.Fatalf("billtruth: open store: %v", err)
+	}
+
+	store := approval.NewStore()
+
+	ccParsers := map[string]statement.CCParser{
+		"icici_cc": &statement.ICICICCParser{},
+		"axis_cc":  &statement.AxisCCParser{},
+		"hdfc_cc":  &statement.HDFCCCParser{},
+	}
+	ccreconDeps := &ccrecon.Deps{
+		Store:      truthStore,
+		Parsers:    ccParsers,
+		Client:     pc,
+		Approvals:  store,
+		Bot:        bot,
+		ChatID:     cfg.Telegram.ChatID,
+		Merchants:  cfg.ParserRules.Merchants,
+		JournalDir: cfg.Paisa.JournalDir,
+		MaxCards:   10,
+	}
 
 	var gmailClient *gmail.Client
 	var gmailPoller *gmail.Poller
@@ -116,10 +141,15 @@ func main() {
 			matches = append(matches, dropfolder.AccountMatch{
 				Pattern:       a.FilenameMatch,
 				LedgerAccount: a.LedgerAccount,
+				Kind:          a.Kind,
+				Password:      a.PDFPassword,
 			})
 		}
 		dropPoller := dropfolder.New(cfg.Statements.DropDir, matches,
 			func(s dropfolder.Statement) error {
+				if s.Kind == "credit_card" {
+					return ccreconDeps.HandleCCStatement(s.Filename, s.PDFBytes, s.LedgerAccount, s.Password)
+				}
 				return handleStatement(s.Filename, s.PDFBytes, s.LedgerAccount, parsers, pc, cfg.Paisa.JournalDir, bot)
 			},
 			func(msg string) {
@@ -129,11 +159,6 @@ func main() {
 			})
 		go dropPoller.Start()
 		log.Infof("dropfolder: watching %s", cfg.Statements.DropDir)
-	}
-
-	truthStore, err := billtruth.Open(cfg.Paisa.JournalDir)
-	if err != nil {
-		log.Fatalf("billtruth: open store: %v", err)
 	}
 
 	if cfg.Monitors != nil {
@@ -175,7 +200,6 @@ func main() {
 		}
 	}
 
-	store := approval.NewStore()
 	ruleStore := rulelearning.NewStore()
 
 	smsCap := &sms.Capability{Bot: bot, Store: store, Cfg: cfg}
