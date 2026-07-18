@@ -101,14 +101,16 @@ type PaymentNotice struct {
 	Date   time.Time
 }
 
-// paymentPreamble: "payment ... received" or "received payment ... towards
-// your ... credit card". Excludes statement notices (checked first by caller,
-// but keep the patterns disjoint anyway).
-var paymentPreamble = regexp.MustCompile(`(?i)payment\s+of\s+(?:Rs\.?|INR)|received\s+payment\s+of\s+(?:Rs\.?|INR)`)
+// paymentPreamble: "payment of Rs/INR ..." — also covers "received payment
+// of ...". Excludes statement notices (checked first by caller, but keep the
+// patterns disjoint anyway).
+var paymentPreamble = regexp.MustCompile(`(?i)payment\s+of\s+(?:Rs\.?|INR)`)
+
+var creditCardRe = regexp.MustCompile(`(?i)credit\s+card`)
 
 func LooksLikePayment(sms string) bool {
 	return paymentPreamble.MatchString(sms) &&
-		regexp.MustCompile(`(?i)credit\s+card`).MatchString(sms) &&
+		creditCardRe.MatchString(sms) &&
 		!LooksLikeStatement(sms)
 }
 
