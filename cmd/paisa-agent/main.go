@@ -242,7 +242,7 @@ func main() {
 		for _, u := range updates {
 			switch {
 			case u.CallbackQuery != nil:
-				handleCallback(u.CallbackQuery, bot, store, ruleStore, ccreconDeps, cfg, *cfgPath)
+				handleCallback(u.CallbackQuery, bot, store, ruleStore, ccreconDeps, cfg, *cfgPath, pc)
 			case u.Message != nil:
 				if u.Message.Chat.ID != cfg.Telegram.ChatID {
 					continue
@@ -283,6 +283,7 @@ func handleCallback(
 	ccreconDeps *ccrecon.Deps,
 	cfg *config.Config,
 	cfgPath string,
+	pc *paisaclient.Client,
 ) {
 	bot.AnswerCallback(cb.ID)
 
@@ -317,6 +318,13 @@ func handleCallback(
 		}
 		bot.EditMessage(msgID, "✅ Posted\n\n"+telegram.FormatDraft(pending.Entry))
 		log.Infof("posted: %s %s %s", pending.Entry.Date, pending.Entry.Desc, pending.Entry.Amt)
+
+		// Re-sync paisa's journal cache so a re-dropped statement PDF sees
+		// this just-approved entry in Postings() and doesn't re-report it
+		// as missing. Non-fatal: the entry is already on disk either way.
+		if err := pc.SyncJournal(); err != nil {
+			log.Warnf("sync journal after approve: %v", err)
+		}
 
 		// Rule learning: propose a merchant rule if dest was corrected
 		kw, acc, desc, ok := rulelearning.Derive(pending.Original, pending.Entry)
