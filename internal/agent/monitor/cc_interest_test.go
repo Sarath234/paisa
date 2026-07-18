@@ -44,7 +44,7 @@ func TestCCInterestSumsMatchingPostings(t *testing.T) {
 		t.Fatalf("insights: %+v", insights)
 	}
 	in := insights[0]
-	if in.Key != "cc-interest/Liabilities:CreditCard:Axis/2026-07-15" {
+	if in.Key != "cc-interest/Liabilities:CreditCard:Axis/2026-07" {
 		t.Errorf("key: %q", in.Key)
 	}
 	if in.Urgency != Immediate {
@@ -147,7 +147,7 @@ func TestCCInterestSumsClosedBillWhileOpenCycleExists(t *testing.T) {
 	if !strings.Contains(insights[0].Title, "₹750.00") {
 		t.Errorf("title: %q, want closed bill's ₹750.00, not the open cycle's ₹50.00", insights[0].Title)
 	}
-	if !strings.Contains(insights[0].Key, "2026-06-15") {
+	if !strings.Contains(insights[0].Key, "2026-06") {
 		t.Errorf("key: %q, want the closed bill's statement end date", insights[0].Key)
 	}
 }
@@ -210,7 +210,7 @@ func TestCCInterestSkipsDetailFetchWhenAlreadySent(t *testing.T) {
 	s := axisTruth(t, day("2026-07-15"))
 	m := NewCCInterest(s, f, []string{"INTEREST"}, 8)
 	m.Now = func() time.Time { return day("2026-07-16").Add(8 * time.Hour) }
-	m.Sent = func(key string) bool { return key == "cc-interest/Liabilities:CreditCard:Axis/2026-07-15" }
+	m.Sent = func(key string) bool { return key == "cc-interest/Liabilities:CreditCard:Axis/2026-07" }
 
 	insights, err := m.Check(context.Background())
 	if err != nil {

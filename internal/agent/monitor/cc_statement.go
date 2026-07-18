@@ -10,24 +10,39 @@ import (
 )
 
 // CCStatementMonitor announces a card's statement once its period closes,
-// reading truth-merged bills (billtruth). The announce key embeds the total
-// rounded to the whole rupee: cc-stmt/<account>/<period>/<amount>. When a
-// PDF later corrects the total by enough to change that rounded amount, the
-// new total produces a distinct key — the notifier's key dedupe delivers it
-// as a fresh message rather than dropping it, and the monitor formats it as
-// a correction instead of a fresh announcement.
+// reading truth-merged bills (billtruth). The announce key embeds the
+// statement MONTH (not the exact PeriodEnd date) and the total rounded to
+// the whole rupee: cc-stmt/<account>/<YYYY-MM>/<amount>. Keying by month
+// rather than exact date keeps the key stable across a PeriodEnd shift
+// (e.g. an API-guessed date corrected a couple of days by SMS/PDF) — a
+// full-date key would miss the prior SentPrefix and re-announce the whole
+// bill. When a PDF later corrects the total by enough to change the
+// rounded amount, the new total produces a distinct key — the notifier's
+// key dedupe delivers it as a fresh message rather than dropping it, and
+// the monitor formats it as a correction instead of a fresh announcement.
+//
+// Trade-off: a genuine cycle whose PeriodEnd is corrected across a month
+// boundary (e.g. Jul-31 -> Aug-2) lands under a new month key and
+// re-announces once. Accepted — it matches billtruth's own ±7d bill-identity
+// imprecision (see billtruth/apply.go's findBillLocked) and is rare.
 type CCStatementMonitor struct {
 	Now func() time.Time
 	// SentPrefix reports whether any previously-sent key starts with the
-	// given prefix (wired to Store.WasSentPrefix). It serves two roles
-	// here: checking whether this bill was announced under some earlier
-	// amount (pass the account/period prefix), and — since no insight key
-	// in this scheme is a strict extension of another — checking whether
-	// this exact announce key was already sent (pass the full key). Nil
-	// means never sent.
+	// given prefix (wired to Store.WasSentPrefix) — used ONLY to detect
+	// "this bill was announced before under some earlier amount" (pass the
+	// account/month prefix), to decide whether a changed total is a
+	// correction. Nil means never sent.
 	SentPrefix func(prefix string) bool
-	bills      BillSource
-	due        func(now, lastRun time.Time) bool
+	// Sent reports whether this exact announce key was already delivered
+	// (wired to Store.WasSent). Using an exact check here — rather than
+	// SentPrefix on the full key — matters because SentPrefix is a raw
+	// string-prefix scan: "cc-stmt/acct/2026-07/100" is itself a string
+	// prefix of an already-sent "cc-stmt/acct/2026-07/1004" key, so using
+	// SentPrefix for this check could wrongly treat an unrelated ₹100 bill
+	// as already delivered. Nil means never sent.
+	Sent  func(key string) bool
+	bills BillSource
+	due   func(now, lastRun time.Time) bool
 }
 
 func NewCCStatement(bills BillSource, digestHour int) *CCStatementMonitor {
@@ -50,11 +65,11 @@ func (m *CCStatementMonitor) Check(ctx context.Context) ([]Insight, error) {
 		if !today.After(DateOnly(b.PeriodEnd)) {
 			continue
 		}
-		period := b.PeriodEnd.Format("2006-01-02")
-		prefix := fmt.Sprintf("cc-stmt/%s/%s/", account, period)
+		month := b.PeriodEnd.Format("2006-01")
+		prefix := fmt.Sprintf("cc-stmt/%s/%s/", account, month)
 		announceKey := fmt.Sprintf("%s%.0f", prefix, b.TotalDue)
 
-		if m.SentPrefix != nil && m.SentPrefix(announceKey) {
+		if m.Sent != nil && m.Sent(announceKey) {
 			continue // this exact amount was already delivered
 		}
 		if m.SentPrefix != nil && m.SentPrefix(prefix) && b.Sources["total_due"] == billtruth.AuthorityPDF {

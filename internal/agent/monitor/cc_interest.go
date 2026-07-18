@@ -72,7 +72,12 @@ func (m *CCInterestMonitor) Check(ctx context.Context) ([]Insight, error) {
 		if b.Sources["interest_total"] == billtruth.AuthorityPDF {
 			if b.InterestTotal > 0 {
 				insights = append(insights, Insight{
-					Key:     fmt.Sprintf("cc-interest/%s/%s", account, b.PeriodEnd.Format("2006-01-02")),
+					// Keyed by statement MONTH, not exact PeriodEnd date —
+					// see interestKey below for why (same premise as
+					// cc_statement's month-keying: a PeriodEnd shift
+					// between the API fallback path and this PDF path
+					// must resolve to the same identity, not double-fire).
+					Key:     fmt.Sprintf("cc-interest/%s/%s", account, b.PeriodEnd.Format("2006-01")),
 					Urgency: Immediate,
 					Title: fmt.Sprintf("⚠️ You paid %s in interest/fees on %s last cycle — consider paying the full balance",
 						INR(b.InterestTotal), Short(account)),
@@ -145,6 +150,13 @@ func (m *CCInterestMonitor) Check(ctx context.Context) ([]Insight, error) {
 	return insights, nil
 }
 
+// interestKey is keyed by statement MONTH (not the exact StatementEndDate)
+// so that a PeriodEnd shift between this API-fallback path and the
+// PDF-truth path in Check above (billtruth's own ±7d bill-identity
+// imprecision — see billtruth/apply.go's findBillLocked) resolves to the
+// same key instead of double-firing the same cycle's interest insight
+// under two dates. Trade-off: a correction that crosses a month boundary
+// (e.g. Jul-31 -> Aug-2) re-announces once — accepted, matches cc_statement.
 func interestKey(account string, bill paisaclient.CreditCardBill) string {
-	return fmt.Sprintf("cc-interest/%s/%s", account, bill.StatementEndDate.Format("2006-01-02"))
+	return fmt.Sprintf("cc-interest/%s/%s", account, bill.StatementEndDate.Format("2006-01"))
 }

@@ -45,7 +45,7 @@ func TestCCStatementFiresAfterPeriodCloses(t *testing.T) {
 		t.Fatalf("want 1 insight: %+v", insights)
 	}
 	in := insights[0]
-	if in.Key != "cc-stmt/Liabilities:CreditCard:Axis/2026-07-15/31200" {
+	if in.Key != "cc-stmt/Liabilities:CreditCard:Axis/2026-07/31200" {
 		t.Errorf("key: %q", in.Key)
 	}
 	if in.Urgency != Digest {
@@ -69,7 +69,7 @@ func TestCCStatementUsesLatestBill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(insights) != 1 || !strings.Contains(insights[0].Key, "2026-07-15") {
+	if len(insights) != 1 || !strings.Contains(insights[0].Key, "2026-07") {
 		t.Fatalf("insights: %+v", insights)
 	}
 }
@@ -103,6 +103,7 @@ func TestCCStatementCorrectionFiresOncePDFDiffers(t *testing.T) {
 	m.Now = func() time.Time { return day("2026-07-16").Add(8 * time.Hour) }
 	sent := map[string]bool{}
 	m.SentPrefix = sentPrefixOver(sent)
+	m.Sent = func(key string) bool { return sent[key] }
 
 	first, err := m.Check(context.Background())
 	if err != nil {
@@ -164,6 +165,7 @@ func TestCCStatementNoCorrectionWithoutPDFSource(t *testing.T) {
 	m.Now = func() time.Time { return day("2026-07-16").Add(8 * time.Hour) }
 	sent := map[string]bool{}
 	m.SentPrefix = sentPrefixOver(sent)
+	m.Sent = func(key string) bool { return sent[key] }
 
 	first, _ := m.Check(context.Background())
 	sent[first[0].Key] = true
@@ -186,5 +188,47 @@ func TestCCStatementNoCorrectionWithoutPDFSource(t *testing.T) {
 	}
 	if strings.Contains(second[0].Title, "corrected") {
 		t.Errorf("non-PDF source must not be announced as a correction: %q", second[0].Title)
+	}
+}
+
+// TestCCStatementExactSentCheckAvoidsLeadingDigitCollision guards the fix
+// for using SentPrefix on the FULL announce key as an "already sent" check:
+// "cc-stmt/acct/2026-07/100" is itself a string prefix of an already-sent
+// "cc-stmt/acct/2026-07/1004" key, so a SentPrefix-based exact check would
+// wrongly treat the unrelated ₹100 bill as already delivered and go quiet.
+// The monitor must use exact Sent (Store.WasSent) for that check instead;
+// SentPrefix is only for the "any announcement under this account/month"
+// correction check.
+func TestCCStatementExactSentCheckAvoidsLeadingDigitCollision(t *testing.T) {
+	s := truthStore(t, billtruth.Bill{
+		Account:   "Liabilities:CreditCard:ICIC6009",
+		PeriodEnd: day("2026-07-10"), DueDate: day("2026-07-30"), TotalDue: 100,
+	})
+	m := NewCCStatement(s, 8)
+	m.Now = func() time.Time { return day("2026-07-16").Add(8 * time.Hour) }
+	// A DIFFERENT bill in the same account/month already announced at ₹1004 —
+	// "...2026-07/100" is a string prefix of "...2026-07/1004".
+	sent := map[string]bool{
+		"cc-stmt/Liabilities:CreditCard:ICIC6009/2026-07/1004": true,
+	}
+	m.SentPrefix = sentPrefixOver(sent)
+	m.Sent = func(key string) bool { return sent[key] }
+
+	insights, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// SMS-sourced bill: SentPrefix(prefix) is true (₹1004 was sent under
+	// this account/month) but Sources["total_due"] isn't PDF, so this must
+	// NOT be treated as a correction either — it falls through to a plain
+	// announcement of the distinct ₹100 key, not silence.
+	if len(insights) != 1 {
+		t.Fatalf("leading-digit collision must not suppress a distinct amount: %+v", insights)
+	}
+	if insights[0].Key != "cc-stmt/Liabilities:CreditCard:ICIC6009/2026-07/100" {
+		t.Errorf("key: %q", insights[0].Key)
+	}
+	if strings.Contains(insights[0].Title, "corrected") {
+		t.Errorf("non-PDF source must not be announced as a correction: %q", insights[0].Title)
 	}
 }

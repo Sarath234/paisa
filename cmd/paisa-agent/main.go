@@ -172,6 +172,7 @@ func main() {
 		ccInterest.Sent = monStore.WasSent
 		ccStatement := monitor.NewCCStatement(truthStore, hour)
 		ccStatement.SentPrefix = monStore.WasSentPrefix
+		ccStatement.Sent = monStore.WasSent
 		mons := []monitor.Monitor{
 			// apiSyncMonitor must run first each pass: it fills billtruth
 			// holes from paisa's computed bills before cc_due reads the
