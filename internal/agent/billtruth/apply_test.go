@@ -148,6 +148,18 @@ func TestAuthorityUpgradePersistsWhenValuesUnchanged(t *testing.T) {
 	}
 }
 
+func TestApplyInterestTotal(t *testing.T) {
+	s, _ := Open(t.TempDir())
+	f := smsFacts()
+	f.Source = AuthorityPDF
+	f.InterestTotal = ptrF(1240.00)
+	s.Apply(f)
+	b := s.BillsFor(acct)[0]
+	if b.InterestTotal != 1240.00 || b.Sources["interest_total"] != AuthorityPDF {
+		t.Fatalf("%+v", b)
+	}
+}
+
 func TestPaymentWithNoUnpaidBillIsIgnored(t *testing.T) {
 	s, _ := Open(t.TempDir())
 	changed, err := s.Apply(Facts{

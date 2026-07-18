@@ -10,15 +10,16 @@ import (
 // Facts is one source's observation about a bill. Nil = "no claim".
 // PeriodEnd nil means payment-only facts (attach to newest unpaid bill).
 type Facts struct {
-	Account     string
-	PeriodStart *time.Time
-	PeriodEnd   *time.Time
-	DueDate     *time.Time
-	TotalDue    *float64
-	MinDue      *float64
-	PaidDate    *time.Time
-	PaidAmount  *float64
-	Source      Authority
+	Account       string
+	PeriodStart   *time.Time
+	PeriodEnd     *time.Time
+	DueDate       *time.Time
+	TotalDue      *float64
+	MinDue        *float64
+	PaidDate      *time.Time
+	PaidAmount    *float64
+	InterestTotal *float64
+	Source        Authority
 }
 
 const samePeriodDays = 7
@@ -81,6 +82,7 @@ func (s *Store) Apply(f Facts) ([]string, error) {
 	setT("due_date", &bill.DueDate, f.DueDate)
 	setF("total_due", &bill.TotalDue, f.TotalDue)
 	setF("min_due", &bill.MinDue, f.MinDue)
+	setF("interest_total", &bill.InterestTotal, f.InterestTotal)
 	if f.PaidDate != nil {
 		if have, ok := bill.Sources["paid_date"]; !ok || f.Source >= have {
 			if bill.PaidDate == nil || !bill.PaidDate.Equal(*f.PaidDate) {

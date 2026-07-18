@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -93,6 +94,17 @@ func (s *Store) Save() error {
 }
 
 func (s *Store) WasSent(key string) bool { _, ok := s.state.Sent[key]; return ok }
+
+// WasSentPrefix reports whether any sent key starts with prefix. Linear scan
+// over the sent-key map (bounded to a few thousand keys by 90-day pruning).
+func (s *Store) WasSentPrefix(prefix string) bool {
+	for k := range s.state.Sent {
+		if strings.HasPrefix(k, prefix) {
+			return true
+		}
+	}
+	return false
+}
 
 func (s *Store) MarkSent(key string) { s.state.Sent[key] = s.Now() }
 

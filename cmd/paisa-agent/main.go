@@ -143,8 +143,10 @@ func main() {
 		}
 		cc := cfg.Monitors.CreditCards
 		hour := cfg.Monitors.DigestHour
-		ccInterest := monitor.NewCCInterest(pc, cc.InterestPatterns, hour)
+		ccInterest := monitor.NewCCInterest(truthStore, pc, cc.InterestPatterns, hour)
 		ccInterest.Sent = monStore.WasSent
+		ccStatement := monitor.NewCCStatement(truthStore, hour)
+		ccStatement.SentPrefix = monStore.WasSentPrefix
 		mons := []monitor.Monitor{
 			// apiSyncMonitor must run first each pass: it fills billtruth
 			// holes from paisa's computed bills before cc_due reads the
@@ -152,7 +154,7 @@ func main() {
 			// reminders.
 			&apiSyncMonitor{store: truthStore, client: pc, due: monitor.DailyAt(hour)},
 			monitor.NewCCDue(truthStore, cc.DueReminderDays, hour),
-			monitor.NewCCStatement(pc, hour),
+			ccStatement,
 			monitor.NewCCUtilization(pc, cc.UtilizationBands, hour),
 			ccInterest,
 		}
