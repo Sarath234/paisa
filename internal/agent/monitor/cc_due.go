@@ -51,11 +51,18 @@ func (m *CCDueMonitor) Check(ctx context.Context) ([]Insight, error) {
 			if !today.After(DateOnly(bill.PeriodEnd)) {
 				continue // period not closed yet (defensive; store holds closed bills)
 			}
-			// Both operands are midnights in the same location, so in
-			// any fixed-offset timezone (IST included) the difference
-			// is an exact multiple of 24h. A DST transition inside the
-			// window would skew it by an hour and truncate the count
-			// by a day — acceptable for reminder bucketing.
+			// Both operands are local midnights: billtruth.Store.Apply
+			// normalizes every incoming SMS/PDF date to local-midnight
+			// (see billtruth/apply.go's localMidnight) specifically so
+			// bill.DueDate always shares time.Local with today
+			// (DateOnly of the real, local time.Now()) — without that
+			// normalization a UTC-parsed date could sit a day off from
+			// "today" depending on the host's UTC offset. Given that
+			// invariant, in any fixed-offset timezone (IST included) the
+			// difference below is an exact multiple of 24h. A DST
+			// transition inside the window would skew it by an hour and
+			// truncate the count by a day — acceptable for reminder
+			// bucketing.
 			days := int(DateOnly(bill.DueDate).Sub(today) / (24 * time.Hour))
 			dueDate := bill.DueDate.Format("2006-01-02")
 			if days < 0 {

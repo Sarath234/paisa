@@ -24,6 +24,20 @@ type Facts struct {
 
 const samePeriodDays = 7
 
+// localMidnight normalizes t to local-midnight, keeping only its calendar
+// date. SMS/PDF dates parse as UTC midnight (no zone info in the source
+// text), while monitors compute "today" as DateOnly(time.Now()) — a local
+// midnight. Left unnormalized, a UTC-midnight bill date compared against a
+// local-midnight "today" can be off by a whole day depending on the host's
+// UTC offset, lagging overdue/announcement checks by a day. Normalizing
+// every incoming date here, at the single ingestion point, means every
+// caller downstream (cc_due, cc_statement, cc_interest) can assume bill
+// dates and time.Now() always share time.Local.
+func localMidnight(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.Local)
+}
+
 // Apply merges facts into the matching bill (creating one if needed) under
 // the authority rules, saves, and reports which fields changed value.
 func (s *Store) Apply(f Facts) ([]string, error) {
@@ -52,11 +66,12 @@ func (s *Store) Apply(f Facts) ([]string, error) {
 		if val == nil {
 			return
 		}
+		normalized := localMidnight(*val)
 		if have, ok := bill.Sources[field]; ok && f.Source < have {
 			return
 		}
-		if !cur.Equal(*val) {
-			*cur = *val
+		if !cur.Equal(normalized) {
+			*cur = normalized
 			changed = append(changed, field)
 		}
 		bill.Sources[field] = f.Source
@@ -85,8 +100,8 @@ func (s *Store) Apply(f Facts) ([]string, error) {
 	setF("interest_total", &bill.InterestTotal, f.InterestTotal)
 	if f.PaidDate != nil {
 		if have, ok := bill.Sources["paid_date"]; !ok || f.Source >= have {
-			if bill.PaidDate == nil || !bill.PaidDate.Equal(*f.PaidDate) {
-				d := *f.PaidDate
+			d := localMidnight(*f.PaidDate)
+			if bill.PaidDate == nil || !bill.PaidDate.Equal(d) {
 				bill.PaidDate = &d
 				changed = append(changed, "paid_date")
 			}

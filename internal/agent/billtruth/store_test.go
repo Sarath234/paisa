@@ -7,8 +7,13 @@ import (
 	"time"
 )
 
+// day builds a local-midnight time.Time, matching what Apply normalizes
+// every incoming date to (see apply.go's localMidnight) and what
+// time.Now() genuinely returns in production — so date arithmetic and
+// equality checks in these tests reflect real behavior regardless of the
+// host's timezone.
 func day(s string) time.Time {
-	t, err := time.Parse("2006-01-02", s)
+	t, err := time.ParseInLocation("2006-01-02", s, time.Local)
 	if err != nil {
 		panic(err)
 	}

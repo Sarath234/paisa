@@ -171,3 +171,54 @@ func TestPaymentWithNoUnpaidBillIsIgnored(t *testing.T) {
 		t.Fatalf("want silent ignore, got changed=%v err=%v", changed, err)
 	}
 }
+
+// TestApplyNormalizesUTCDatesToLocalMidnight guards the timezone fix: SMS
+// and PDF dates parse as UTC midnight (time.Parse with no zone), while
+// monitors compute "today" as DateOnly(time.Now()) — a LOCAL midnight.
+// Comparing a UTC midnight against a local midnight can be off by a whole
+// day depending on the host's UTC offset, lagging overdue/announcement
+// checks. Apply must normalize every incoming date to local-midnight (same
+// calendar y/m/d, time.Local location) so stored bill dates and
+// DateOnly(Now()) are always directly comparable.
+func TestApplyNormalizesUTCDatesToLocalMidnight(t *testing.T) {
+	s, _ := Open(t.TempDir())
+	utcPeriodEnd := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
+	utcDue := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
+	total := 100.0
+	if _, err := s.Apply(Facts{
+		Account: acct, PeriodEnd: &utcPeriodEnd, DueDate: &utcDue, TotalDue: &total,
+		Source: AuthoritySMS,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	b := s.BillsFor(acct)[0]
+	wantDue := time.Date(2026, 7, 30, 0, 0, 0, 0, time.Local)
+	if b.DueDate.Location() != time.Local {
+		t.Fatalf("due date location = %v, want time.Local", b.DueDate.Location())
+	}
+	if !b.DueDate.Equal(wantDue) {
+		t.Fatalf("due date = %v, want local midnight %v", b.DueDate, wantDue)
+	}
+	wantPeriodEnd := time.Date(2026, 7, 10, 0, 0, 0, 0, time.Local)
+	if !b.PeriodEnd.Equal(wantPeriodEnd) {
+		t.Fatalf("period end = %v, want local midnight %v", b.PeriodEnd, wantPeriodEnd)
+	}
+}
+
+// TestApplyNormalizesUTCPaidDateToLocalMidnight covers the PaidDate
+// special-case branch (which setT doesn't handle — see Apply) separately.
+func TestApplyNormalizesUTCPaidDateToLocalMidnight(t *testing.T) {
+	s, _ := Open(t.TempDir())
+	s.Apply(smsFacts())
+	utcPaid := time.Date(2026, 7, 25, 0, 0, 0, 0, time.UTC)
+	if _, err := s.Apply(Facts{
+		Account: acct, PaidDate: &utcPaid, Source: AuthoritySMS,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	b := s.BillsFor(acct)[0]
+	wantPaid := time.Date(2026, 7, 25, 0, 0, 0, 0, time.Local)
+	if b.PaidDate == nil || b.PaidDate.Location() != time.Local || !b.PaidDate.Equal(wantPaid) {
+		t.Fatalf("paid date = %v, want local midnight %v", b.PaidDate, wantPaid)
+	}
+}

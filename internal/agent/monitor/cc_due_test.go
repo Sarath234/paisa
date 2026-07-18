@@ -58,8 +58,13 @@ func fetcherWithDetail(card paisaclient.CreditCardSummary) *fakeFetcher {
 	}
 }
 
+// day builds a local-midnight time.Time. billtruth.Store.Apply normalizes
+// every incoming bill date to local-midnight (see billtruth/apply.go's
+// localMidnight), and production Now() (time.Now()) is genuinely local —
+// so tests build "today" overrides and bill dates the same way to stay
+// self-consistent regardless of the host's timezone.
 func day(s string) time.Time {
-	t, err := time.Parse("2006-01-02", s)
+	t, err := time.ParseInLocation("2006-01-02", s, time.Local)
 	if err != nil {
 		panic(err)
 	}
@@ -122,6 +127,39 @@ func TestCCDueFromTruthStore(t *testing.T) {
 	}
 	if !strings.Contains(insights[0].Title, "₹23450.50") {
 		t.Errorf("amount from TotalDue: %q", insights[0].Title)
+	}
+}
+
+// TestCCDueBucketsCorrectlyWithUTCParsedDueDate guards the timezone
+// normalization fix in billtruth.Apply: SMS/PDF dates parse as UTC
+// midnight (e.g. notices.parseNoticeDate), regardless of host timezone.
+// Without normalizing them to local-midnight on the way into the store,
+// comparing against DateOnly(time.Now()) (a local midnight) can be off by
+// a day, shifting which reminder offset fires. Apply a due date built the
+// same way a real UTC-midnight parse would, and confirm the day-math
+// still buckets to the right offset.
+func TestCCDueBucketsCorrectlyWithUTCParsedDueDate(t *testing.T) {
+	s, err := billtruth.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	periodEnd := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
+	due := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
+	total := 23450.50
+	if _, err := s.Apply(billtruth.Facts{
+		Account: "Liabilities:CreditCard:ICIC6009", PeriodEnd: &periodEnd, DueDate: &due, TotalDue: &total,
+		Source: billtruth.AuthoritySMS,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	m := NewCCDue(s, []int{3, 1, 0}, 8)
+	m.Now = func() time.Time { return day("2026-07-27").Add(8 * time.Hour) }
+	insights, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(insights) != 1 || insights[0].Key != "cc-due/Liabilities:CreditCard:ICIC6009/2026-07-30/d-3" {
+		t.Fatalf("%+v", insights)
 	}
 }
 
