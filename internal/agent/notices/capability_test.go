@@ -36,6 +36,18 @@ func TestCapabilityMatchesNotices(t *testing.T) {
 	}
 }
 
+// TestCapabilityDoesNotMatchSpendAlertPhrasedAsPayment: a spend alert
+// worded as "Payment of Rs.X made using your Credit Card" must fall through
+// to the sms (transaction) capability, not be claimed here as a payment
+// notice — claiming it would fake PaidDate and eat the spend.
+func TestCapabilityDoesNotMatchSpendAlertPhrasedAsPayment(t *testing.T) {
+	c, _, _ := newCap(t)
+	sms := "Payment of Rs.1200 made using your Credit Card XX1234 at MERCHANT on 12-Jul-26."
+	if c.Match(sms) {
+		t.Errorf("spend-alert phrased as payment must NOT match notices — it belongs to sms: %q", sms)
+	}
+}
+
 func TestHandleStatementAppliesFactsAndConfirms(t *testing.T) {
 	c, store, bot := newCap(t)
 	if err := c.Handle(stmtSMS); err != nil {

@@ -107,3 +107,30 @@ func TestStatementNoticeIsNotPayment(t *testing.T) {
 		t.Fatalf("statement notice matched payment extractor: %+v", n)
 	}
 }
+
+// TestSpendAlertIsNotPayment guards against a spend-alert SMS being
+// misread as a payment: "Payment of Rs.X made using your Credit Card" is
+// a SPEND notification (the card was used to pay a merchant/biller), not
+// money received against the card balance. Treating it as a payment would
+// fake PaidDate (killing cc_due reminders for a bill that isn't actually
+// paid) and would eat the spend (never surfaced as a transaction).
+func TestSpendAlertIsNotPayment(t *testing.T) {
+	sms := "Payment of Rs.1200 made using your Credit Card XX1234 at MERCHANT on 12-Jul-26."
+	if LooksLikePayment(sms) {
+		t.Fatalf("spend-alert phrasing must not look like a payment: %q", sms)
+	}
+	n, err := ExtractPayment(sms)
+	if n != nil || err != nil {
+		t.Fatalf("spend-alert must yield (nil, nil), got %+v, %v", n, err)
+	}
+}
+
+// TestSpendAlertUsingYourCardIsNotPayment covers the "using your Credit
+// Card" phrasing variant directly (without "made"), since the exclusion
+// must catch it even when it still has a "payment of Rs" preamble.
+func TestSpendAlertUsingYourCardIsNotPayment(t *testing.T) {
+	sms := "Payment of Rs.1200 using your Credit Card XX1234 at MERCHANT on 12-Jul-26."
+	if LooksLikePayment(sms) {
+		t.Fatalf("spend phrasing must not look like a payment: %q", sms)
+	}
+}

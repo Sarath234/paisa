@@ -108,9 +108,24 @@ var paymentPreamble = regexp.MustCompile(`(?i)payment\s+of\s+(?:Rs\.?|INR)`)
 
 var creditCardRe = regexp.MustCompile(`(?i)credit\s+card`)
 
+// receiveDirection requires language that says money came IN against the
+// card balance ("received", "credited", "towards your ... card"). Without
+// this, "Payment of Rs.1200 made using your Credit Card XX1234 at MERCHANT"
+// — a SPEND alert phrased with "payment of" — would be misread as a
+// payment: it would fake PaidDate (killing cc_due reminders for a bill
+// that isn't actually paid) and the spend itself would never be recorded.
+var receiveDirection = regexp.MustCompile(`(?i)received|credited|towards\s+your`)
+
+// spendPhrasing rejects spend-direction wording even when receiveDirection
+// also happens to match (e.g. "received" appearing elsewhere in a longer
+// message). Kept intentionally simple per the spend-alert shapes seen.
+var spendPhrasing = regexp.MustCompile(`(?i)made\s+using|using\s+your|spent`)
+
 func LooksLikePayment(sms string) bool {
 	return paymentPreamble.MatchString(sms) &&
 		creditCardRe.MatchString(sms) &&
+		receiveDirection.MatchString(sms) &&
+		!spendPhrasing.MatchString(sms) &&
 		!LooksLikeStatement(sms)
 }
 
