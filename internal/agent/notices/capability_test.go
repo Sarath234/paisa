@@ -1,6 +1,7 @@
 package notices
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -84,5 +85,52 @@ func TestHandleExtractionFailureReplies(t *testing.T) {
 	}
 	if len(bot.sent) != 1 || !strings.Contains(strings.ToLower(bot.sent[0]), "due date") {
 		t.Fatalf("failure reply must name the field: %q", bot.sent)
+	}
+}
+
+// failingApplier always fails Apply, simulating a persistence failure (e.g.
+// disk full, read-only filesystem) without needing a real broken store.
+type failingApplier struct{ err error }
+
+func (f *failingApplier) Apply(billtruth.Facts) ([]string, error) { return nil, f.err }
+
+// TestHandleStatementReplyWarnsOnPersistenceFailure: when store.Apply fails,
+// the reply must warn that the fact was NOT saved — replying with the
+// normal "📄 Noted" success text would silently lose the statement facts on
+// restart, since the caller has no other signal the write failed.
+func TestHandleStatementReplyWarnsOnPersistenceFailure(t *testing.T) {
+	bot := &fakeSender{}
+	applier := &failingApplier{err: errors.New("disk full")}
+	c := NewCapabilityWithApplier(applier, bot, map[string]string{
+		"6009": "Liabilities:CreditCard:ICIC6009",
+	})
+	if err := c.Handle(stmtSMS); err != nil {
+		t.Fatal(err)
+	}
+	if len(bot.sent) != 1 || !strings.Contains(bot.sent[0], "NOT saved") {
+		t.Fatalf("want a NOT-saved warning reply, got %q", bot.sent)
+	}
+	if strings.Contains(bot.sent[0], "📄 Noted") {
+		t.Fatalf("must not send the success text on persistence failure: %q", bot.sent[0])
+	}
+}
+
+// TestHandlePaymentReplyWarnsOnPersistenceFailure mirrors the statement
+// case for handlePayment.
+func TestHandlePaymentReplyWarnsOnPersistenceFailure(t *testing.T) {
+	bot := &fakeSender{}
+	applier := &failingApplier{err: errors.New("disk full")}
+	c := NewCapabilityWithApplier(applier, bot, map[string]string{
+		"6009": "Liabilities:CreditCard:ICIC6009",
+	})
+	sms := "Payment of Rs 23,450.50 received on your ICICI Bank Credit Card XX6009 on 25-Jul-26. Thank you."
+	if err := c.Handle(sms); err != nil {
+		t.Fatal(err)
+	}
+	if len(bot.sent) != 1 || !strings.Contains(bot.sent[0], "NOT saved") {
+		t.Fatalf("want a NOT-saved warning reply, got %q", bot.sent)
+	}
+	if strings.Contains(bot.sent[0], "✅") {
+		t.Fatalf("must not send the success text on persistence failure: %q", bot.sent[0])
 	}
 }

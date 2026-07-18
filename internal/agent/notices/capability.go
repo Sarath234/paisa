@@ -12,16 +12,28 @@ type TextSender interface {
 	SendText(text string) error
 }
 
+// applier is the tiny slice of *billtruth.Store this capability needs —
+// narrow enough that tests can inject a failure without a real store.
+type applier interface {
+	Apply(f billtruth.Facts) ([]string, error)
+}
+
 // Capability routes statement/payment notice SMSes into the billtruth
 // store. Registered BEFORE the sms (transaction) capability so a notice is
 // never mis-parsed as a spend.
 type Capability struct {
-	store        *billtruth.Store
+	store        applier
 	bot          TextSender
 	cardsByLast4 map[string]string // "6009" → ledger account
 }
 
 func NewCapability(store *billtruth.Store, bot TextSender, cardsByLast4 map[string]string) *Capability {
+	return NewCapabilityWithApplier(store, bot, cardsByLast4)
+}
+
+// NewCapabilityWithApplier is NewCapability generalized over the applier
+// seam, for tests that need to inject a persistence failure.
+func NewCapabilityWithApplier(store applier, bot TextSender, cardsByLast4 map[string]string) *Capability {
 	return &Capability{store: store, bot: bot, cardsByLast4: cardsByLast4}
 }
 
@@ -65,6 +77,7 @@ func (c *Capability) handleStatement(n *StatementNotice, exErr error) error {
 	})
 	if err != nil {
 		log.Warnf("notices: apply statement: %v", err)
+		return c.bot.SendText(fmt.Sprintf("⚠️ Noted but NOT saved to disk — will be lost on restart: %v", err))
 	}
 	_ = changed // reply is the same whether fields changed or repeated
 	return c.bot.SendText(fmt.Sprintf("📄 Noted: %s statement %s — total due ₹%.2f, due %s",
@@ -87,6 +100,7 @@ func (c *Capability) handlePayment(n *PaymentNotice, exErr error) error {
 	})
 	if err != nil {
 		log.Warnf("notices: apply payment: %v", err)
+		return c.bot.SendText(fmt.Sprintf("⚠️ Noted but NOT saved to disk — will be lost on restart: %v", err))
 	}
 	if len(changed) == 0 {
 		return c.bot.SendText(fmt.Sprintf("✅ Payment of ₹%.2f noted for %s (no open bill to attach — recorded nothing new)", n.Amount, shortAccount(account)))
