@@ -90,6 +90,8 @@ type StatementsConfig struct {
 type DropfolderAccount struct {
 	FilenameMatch string `yaml:"filename_match"`
 	LedgerAccount string `yaml:"ledger_account"`
+	Kind          string `yaml:"kind"` // "" | "checking" | "credit_card"
+	PDFPassword   string `yaml:"pdf_password"`
 }
 
 func (m *MonitorsConfig) setDefaults() {
@@ -128,6 +130,15 @@ func Load(path string) (*Config, error) {
 			return nil, err
 		}
 		cfg.Statements.DropDir = filepath.Join(home, cfg.Statements.DropDir[2:])
+	}
+	if cfg.Statements != nil {
+		for i, a := range cfg.Statements.Accounts {
+			switch a.Kind {
+			case "", "checking", "credit_card":
+			default:
+				return nil, fmt.Errorf("statements.accounts[%d].kind must be checking or credit_card, got %q", i, a.Kind)
+			}
+		}
 	}
 	return &cfg, nil
 }

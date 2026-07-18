@@ -168,6 +168,33 @@ func TestLoadMonitorsDefaultDigestHour(t *testing.T) {
 	}
 }
 
+func TestLoadStatementsCreditCardFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "paisa-agent.yaml")
+	yaml := "paisa:\n  url: http://x\n  journal_dir: /tmp/j\nstatements:\n  drop_dir: /tmp/drop\n  accounts:\n    - filename_match: \"*6009*\"\n      ledger_account: \"Liabilities:CreditCard:ICIC6009\"\n      kind: credit_card\n      pdf_password: \"pw123\"\n"
+	if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := cfg.Statements.Accounts[0]
+	if a.Kind != "credit_card" || a.PDFPassword != "pw123" {
+		t.Fatalf("%+v", a)
+	}
+}
+
+func TestLoadStatementsRejectsBadKind(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "paisa-agent.yaml")
+	yaml := "paisa:\n  url: http://x\n  journal_dir: /tmp/j\nstatements:\n  drop_dir: /tmp/drop\n  accounts:\n    - filename_match: \"*x*\"\n      ledger_account: \"A:B\"\n      kind: mortgage\n"
+	os.WriteFile(path, []byte(yaml), 0644)
+	if _, err := config.Load(path); err == nil {
+		t.Fatal("want error for kind=mortgage")
+	}
+}
+
 func TestLoadMonitorsDigestHourValidation(t *testing.T) {
 	cases := []struct {
 		hour    string
