@@ -66,6 +66,38 @@ func TestCorruptFileRecovers(t *testing.T) {
 	}
 }
 
+func TestAuthorityValuesArePinned(t *testing.T) {
+	if AuthorityAPI != 0 || AuthoritySMS != 1 || AuthorityPDF != 2 {
+		t.Fatalf("Authority values reordered: api=%d sms=%d pdf=%d", AuthorityAPI, AuthoritySMS, AuthorityPDF)
+	}
+}
+
+func TestBillsForReturnsDeepCopies(t *testing.T) {
+	s, _ := Open(t.TempDir())
+	paid := day("2026-07-20")
+	s.putForTest(Bill{
+		Account:  "Liabilities:CreditCard:ICIC6009",
+		PaidDate: &paid,
+		Sources:  map[string]Authority{"total_due": AuthoritySMS},
+	})
+
+	got := s.BillsFor("Liabilities:CreditCard:ICIC6009")
+	got[0].Sources["total_due"] = AuthorityPDF
+	got[0].Sources["injected"] = AuthorityAPI
+	*got[0].PaidDate = day("1999-01-01")
+
+	fresh := s.BillsFor("Liabilities:CreditCard:ICIC6009")
+	if fresh[0].Sources["total_due"] != AuthoritySMS {
+		t.Errorf("mutating returned Sources leaked into store: %+v", fresh[0].Sources)
+	}
+	if _, ok := fresh[0].Sources["injected"]; ok {
+		t.Error("new key in returned Sources leaked into store")
+	}
+	if !fresh[0].PaidDate.Equal(day("2026-07-20")) {
+		t.Errorf("mutating returned *PaidDate leaked into store: %v", fresh[0].PaidDate)
+	}
+}
+
 func TestSavePrunesTo12CyclesPerCard(t *testing.T) {
 	dir := t.TempDir()
 	s, _ := Open(dir)

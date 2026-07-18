@@ -78,13 +78,27 @@ func (s *Store) saveLocked() error {
 	return nil
 }
 
-// BillsFor returns copies of the account's bills, newest PeriodEnd first.
+// BillsFor returns deep copies of the account's bills, newest PeriodEnd
+// first. Callers may mutate the result freely without corrupting the store.
 func (s *Store) BillsFor(account string) []Bill {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	src := s.bills[account]
 	out := make([]Bill, len(src))
-	copy(out, src)
+	for i, b := range src {
+		if b.Sources != nil {
+			sources := make(map[string]Authority, len(b.Sources))
+			for k, v := range b.Sources {
+				sources[k] = v
+			}
+			b.Sources = sources
+		}
+		if b.PaidDate != nil {
+			paid := *b.PaidDate
+			b.PaidDate = &paid
+		}
+		out[i] = b
+	}
 	sort.Slice(out, func(i, j int) bool { return out[i].PeriodEnd.After(out[j].PeriodEnd) })
 	return out
 }
