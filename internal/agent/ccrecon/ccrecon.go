@@ -212,6 +212,7 @@ func (d *Deps) HandleCCStatement(filename string, pdfBytes []byte, ledgerAccount
 	}
 	shownExtra := diff.Extra
 	if len(shownExtra) > extraBudget {
+		summary += fmt.Sprintf(" (%d more extra)", len(shownExtra)-extraBudget)
 		shownExtra = shownExtra[:extraBudget]
 	}
 	type extraCard struct{ block, file string }
@@ -295,14 +296,14 @@ func (d *Deps) HandleCallback(data string, messageID int) (bool, error) {
 	case "ccdel":
 		d.mu.Lock()
 		p, ok := d.pendingRemovals[messageID]
-		if ok {
-			delete(d.pendingRemovals, messageID)
-		}
 		d.mu.Unlock()
 		if !ok {
 			log.Debugf("ccrecon: ccdel callback for unknown messageID %d (stale/restarted)", messageID)
 			return true, nil
 		}
+		// Delete-after-success: the pending entry is only dropped once the
+		// removal actually happened, so a failed attempt stays retryable.
+		// A double-tap after success hits the stale no-op branch above.
 		if err := journaledit.RemoveBlock(d.JournalDir, p.file, p.block); err != nil {
 			log.Errorf("ccrecon: remove block: %v", err)
 			if editErr := d.Bot.EditMessage(messageID, "❌ Failed to remove: "+err.Error()); editErr != nil {
@@ -310,8 +311,15 @@ func (d *Deps) HandleCallback(data string, messageID int) (bool, error) {
 			}
 			return true, err
 		}
+		d.mu.Lock()
+		delete(d.pendingRemovals, messageID)
+		d.mu.Unlock()
 		if err := d.Client.SyncJournal(); err != nil {
 			log.Errorf("ccrecon: sync journal after remove: %v", err)
+			if editErr := d.Bot.EditMessage(messageID, "🗑 removed — but paisa sync failed: run sync manually"); editErr != nil {
+				log.Errorf("ccrecon: edit message: %v", editErr)
+			}
+			return true, err
 		}
 		if err := d.Bot.EditMessage(messageID, "🗑 removed"); err != nil {
 			log.Errorf("ccrecon: edit message: %v", err)

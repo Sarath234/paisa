@@ -57,10 +57,11 @@ func (f *fakeBot) EditMessage(messageID int, text string) error {
 type fakeClient struct {
 	postings  []paisaclient.Posting
 	syncCalls int
+	syncErr   error
 }
 
 func (f *fakeClient) Postings() ([]paisaclient.Posting, error) { return f.postings, nil }
-func (f *fakeClient) SyncJournal() error                       { f.syncCalls++; return nil }
+func (f *fakeClient) SyncJournal() error                       { f.syncCalls++; return f.syncErr }
 
 // stubParser is a fixture CCParser. name lets TestParserForRoutesByAccountInfix
 // distinguish the map entries by Name(); it defaults to "icici_cc" so the
@@ -258,6 +259,16 @@ func TestHandleCallbackRemoveConfirmed(t *testing.T) {
 	if len(baks) != 1 {
 		t.Fatal("backup missing")
 	}
+
+	// Double-tap after success must be a stale no-op: no second sync, no
+	// second removal attempt against the rewritten file.
+	handled, err = d.HandleCallback("ccdel", 42)
+	if !handled || err != nil {
+		t.Fatalf("second tap: handled=%v err=%v", handled, err)
+	}
+	if client.syncCalls != 1 {
+		t.Fatalf("second tap must not sync again: %d", client.syncCalls)
+	}
 }
 
 func TestHandleCallbackKeepLeavesFileUntouched(t *testing.T) {
@@ -318,5 +329,105 @@ func TestHandleCallbackStaleMessageIDIgnored(t *testing.T) {
 	after, _ := os.ReadFile(path)
 	if !strings.Contains(string(after), "Dup") {
 		t.Fatalf("file must be untouched for stale id")
+	}
+}
+
+// TestHandleCallbackSyncFailureSurfaced: the removal succeeded but paisa's
+// journal sync failed — the card must say so, not claim a clean removal.
+func TestHandleCallbackSyncFailureSurfaced(t *testing.T) {
+	journalDir := t.TempDir()
+	dup := "2026/06/22 Dup\n    " + cardAcct + "               -999.00 INR\n    Expenses:Food:Hyd\n"
+	path := filepath.Join(journalDir, "auto-import.ledger")
+	os.WriteFile(path, []byte(dup), 0644)
+
+	client := &fakeClient{syncErr: fmt.Errorf("paisa unreachable")}
+	bot := &fakeBot{}
+	d := &Deps{Client: client, Bot: bot, JournalDir: journalDir}
+	d.setPendingRemoval(11, pendingRemoval{block: dup, file: path})
+
+	handled, _ := d.HandleCallback("ccdel", 11)
+	if !handled {
+		t.Fatal("must be handled")
+	}
+	after, _ := os.ReadFile(path)
+	if strings.Contains(string(after), "Dup") {
+		t.Fatalf("removal itself must still happen: %q", after)
+	}
+	if !strings.Contains(bot.edits[11], "removed") || !strings.Contains(bot.edits[11], "sync failed") {
+		t.Fatalf("edit must surface sync failure: %q", bot.edits[11])
+	}
+}
+
+// TestHandleCallbackRemoveFailureStaysRetryable: a failed RemoveBlock must
+// leave the pending entry in place so a later tap can retry (delete-after-
+// success semantics), and the card must show the error.
+func TestHandleCallbackRemoveFailureStaysRetryable(t *testing.T) {
+	journalDir := t.TempDir()
+	dup := "2026/06/22 Dup\n    " + cardAcct + "               -999.00 INR\n    Expenses:Food:Hyd\n"
+	path := filepath.Join(journalDir, "auto-import.ledger")
+	// File does NOT contain the block yet -> RemoveBlock errors (0 occurrences).
+	os.WriteFile(path, []byte("2026/06/20 Other\n    A:B               -1.00 INR\n    E:F\n"), 0644)
+
+	client := &fakeClient{}
+	bot := &fakeBot{}
+	d := &Deps{Client: client, Bot: bot, JournalDir: journalDir}
+	d.setPendingRemoval(13, pendingRemoval{block: dup, file: path})
+
+	handled, err := d.HandleCallback("ccdel", 13)
+	if !handled || err == nil {
+		t.Fatalf("want handled with error, got handled=%v err=%v", handled, err)
+	}
+	if client.syncCalls != 0 {
+		t.Fatal("must not sync after failed removal")
+	}
+	if !strings.Contains(bot.edits[13], "Failed") {
+		t.Fatalf("edit must show failure: %q", bot.edits[13])
+	}
+
+	// The pending entry survived; once the file contains the block, a
+	// second tap succeeds.
+	os.WriteFile(path, []byte(dup), 0644)
+	handled, err = d.HandleCallback("ccdel", 13)
+	if !handled || err != nil {
+		t.Fatalf("retry: handled=%v err=%v", handled, err)
+	}
+	after, _ := os.ReadFile(path)
+	if strings.Contains(string(after), "Dup") {
+		t.Fatalf("retry must remove the block: %q", after)
+	}
+	if client.syncCalls != 1 {
+		t.Fatalf("retry must sync once: %d", client.syncCalls)
+	}
+}
+
+// TestHandleCCStatementExtraTruncationNoted: extras beyond the shared card
+// budget get a "(N more extra)" note in the summary, like missing does.
+func TestHandleCCStatementExtraTruncationNoted(t *testing.T) {
+	store, _ := billtruth.Open(t.TempDir())
+	res := statement.CCResult{
+		Last4: "6009", PeriodStart: day("2026-06-11"), PeriodEnd: day("2026-07-10"),
+		DueDate: day("2026-07-30"), TotalDue: 1000,
+	}
+	client := &fakeClient{postings: []paisaclient.Posting{
+		{Date: day("2026-06-21"), Account: cardAcct, Amount: -111.00, Payee: "Dup One"},
+		{Date: day("2026-06-22"), Account: cardAcct, Amount: -222.00, Payee: "Dup Two"},
+	}}
+	journalDir := t.TempDir()
+	journal := "2026/06/21 Dup One\n    " + cardAcct + "               -111.00 INR\n    Expenses:Food:Hyd\n\n" +
+		"2026/06/22 Dup Two\n    " + cardAcct + "               -222.00 INR\n    Expenses:Food:Hyd\n"
+	os.WriteFile(filepath.Join(journalDir, "auto-import.ledger"), []byte(journal), 0644)
+
+	bot := &fakeBot{}
+	d := &Deps{Store: store, Parsers: map[string]statement.CCParser{"icici_cc": &stubParser{res: res}},
+		Client: client, Approvals: approval.NewStore(), Bot: bot,
+		JournalDir: journalDir, MaxCards: 1}
+	if err := d.HandleCCStatement("stmt.pdf", []byte("%PDF"), cardAcct, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(bot.confirms) != 1 {
+		t.Fatalf("budget of 1: confirms=%v", bot.confirms)
+	}
+	if !strings.Contains(bot.texts[0], "1 more extra") {
+		t.Fatalf("summary must note truncated extras: %q", bot.texts[0])
 	}
 }
