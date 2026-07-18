@@ -7,16 +7,19 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/agent/approval"
+	"github.com/ananthakumaran/paisa/internal/agent/billtruth"
 	"github.com/ananthakumaran/paisa/internal/agent/config"
 	"github.com/ananthakumaran/paisa/internal/agent/dropfolder"
 	"github.com/ananthakumaran/paisa/internal/agent/gmail"
 	agentledger "github.com/ananthakumaran/paisa/internal/agent/ledger"
 	"github.com/ananthakumaran/paisa/internal/agent/llm"
 	"github.com/ananthakumaran/paisa/internal/agent/monitor"
+	"github.com/ananthakumaran/paisa/internal/agent/notices"
 	"github.com/ananthakumaran/paisa/internal/agent/paisaclient"
 	"github.com/ananthakumaran/paisa/internal/agent/qa"
 	"github.com/ananthakumaran/paisa/internal/agent/reconcile"
@@ -147,6 +150,22 @@ func main() {
 		log.Infof("monitor: scheduler started (%d monitors, digest at %02d:00)", len(mons), hour)
 	}
 
+	truthStore, err := billtruth.Open(cfg.Paisa.JournalDir)
+	if err != nil {
+		log.Fatalf("billtruth: open store: %v", err)
+	}
+
+	cardsByLast4 := map[string]string{}
+	for _, r := range cfg.ParserRules.Accounts {
+		dest := r.Destinations
+		if strings.HasPrefix(dest, "Liabilities:CreditCard:") && len(dest) >= 4 {
+			last4 := dest[len(dest)-4:]
+			if _, err := strconv.Atoi(last4); err == nil {
+				cardsByLast4[last4] = dest
+			}
+		}
+	}
+
 	store := approval.NewStore()
 	ruleStore := rulelearning.NewStore()
 
@@ -159,9 +178,12 @@ func main() {
 			Now:    time.Now,
 		},
 	}
+	noticesCap := notices.NewCapability(truthStore, bot, cardsByLast4)
 
 	rt := router.New(
-		[]router.Capability{smsCap, qaCap},
+		// notices MUST precede sms: statement/payment notice SMSes must never
+		// fall through to transaction parsing.
+		[]router.Capability{noticesCap, smsCap, qaCap},
 		func(text string) (string, error) {
 			return llm.ClassifyIntent(text, intents, cfg.Ollama)
 		},
