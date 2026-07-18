@@ -70,3 +70,40 @@ func TestExtractStatementPartialFailureNamesField(t *testing.T) {
 		t.Fatalf("want field error, got %+v %v", n, err)
 	}
 }
+
+func TestExtractPaymentICICI(t *testing.T) {
+	sms := "Payment of Rs 23,450.50 received on your ICICI Bank Credit Card XX6009 on 25-Jul-26. Thank you."
+	n, err := ExtractPayment(sms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n == nil || n.Last4 != "6009" || n.Amount != 23450.50 || !n.Date.Equal(day("2026-07-25")) {
+		t.Fatalf("%+v", n)
+	}
+}
+
+func TestExtractPaymentAxis(t *testing.T) {
+	sms := "We have received payment of INR 15,200.00 towards your Axis Bank Credit Card XX6792 on 05-08-2026."
+	n, err := ExtractPayment(sms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n == nil || n.Last4 != "6792" || n.Amount != 15200.00 {
+		t.Fatalf("%+v", n)
+	}
+}
+
+func TestExtractPaymentNotANotice(t *testing.T) {
+	n, err := ExtractPayment("INR 500.00 spent on ICICI Bank Card XX6009 at AMAZON on 12-Jul-26")
+	if n != nil || err != nil {
+		t.Fatalf("spend SMS must not be a payment notice: %+v %v", n, err)
+	}
+}
+
+func TestStatementNoticeIsNotPayment(t *testing.T) {
+	sms := "Your ICICI Bank Credit Card XX6009 statement dated 10-Jul-26 has been sent. Total Amount Due Rs 23,450.50. Minimum Amount Due Rs 1,180.00. Due Date 30-Jul-26."
+	n, _ := ExtractPayment(sms)
+	if n != nil {
+		t.Fatalf("statement notice matched payment extractor: %+v", n)
+	}
+}

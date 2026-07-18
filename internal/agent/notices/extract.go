@@ -23,10 +23,13 @@ type StatementNotice struct {
 // statementPreamble marks an SMS as a statement notice (any bank).
 var statementPreamble = regexp.MustCompile(`(?i)(credit\s+card).{0,80}(statement)|(statement).{0,80}(credit\s+card)`)
 
+// statementAmountDue marks the presence of "total/min due" language.
+var statementAmountDue = regexp.MustCompile(`(?i)(total|min).{0,20}due`)
+
 // LooksLikeStatement is the cheap router Match check.
 func LooksLikeStatement(sms string) bool {
 	return statementPreamble.MatchString(sms) &&
-		regexp.MustCompile(`(?i)(total|min).{0,20}due`).MatchString(sms)
+		statementAmountDue.MatchString(sms)
 }
 
 var (
@@ -90,4 +93,54 @@ func parseNoticeDate(s string) (time.Time, error) {
 func parseAmount(s string) float64 {
 	f, _ := strconv.ParseFloat(strings.ReplaceAll(s, ",", ""), 64)
 	return f
+}
+
+type PaymentNotice struct {
+	Last4  string
+	Amount float64
+	Date   time.Time
+}
+
+// paymentPreamble: "payment ... received" or "received payment ... towards
+// your ... credit card". Excludes statement notices (checked first by caller,
+// but keep the patterns disjoint anyway).
+var paymentPreamble = regexp.MustCompile(`(?i)payment\s+of\s+(?:Rs\.?|INR)|received\s+payment\s+of\s+(?:Rs\.?|INR)`)
+
+func LooksLikePayment(sms string) bool {
+	return paymentPreamble.MatchString(sms) &&
+		regexp.MustCompile(`(?i)credit\s+card`).MatchString(sms) &&
+		!LooksLikeStatement(sms)
+}
+
+var (
+	rePayAmt  = regexp.MustCompile(`(?i)payment\s+of\s+(?:Rs\.?|INR)\s*([\d,]+\.?\d*)`)
+	rePayDate = regexp.MustCompile(`(?i)on\s+([0-9]{2}[-/][A-Za-z0-9]{2,3}[-/][0-9]{2,4})\b\.?`)
+)
+
+func ExtractPayment(sms string) (*PaymentNotice, error) {
+	if !LooksLikePayment(sms) {
+		return nil, nil
+	}
+	n := &PaymentNotice{}
+	m := reLast4.FindStringSubmatch(sms)
+	if m == nil {
+		return nil, fmt.Errorf("card last-4 not found")
+	}
+	n.Last4 = m[1]
+	if m = rePayAmt.FindStringSubmatch(sms); m == nil {
+		return nil, fmt.Errorf("payment amount not found")
+	}
+	n.Amount = parseAmount(m[1])
+	// date: take the LAST date-looking token (the "on <date>" nearest the end;
+	// some banks put the card number pattern XXnnnn earlier which never matches).
+	all := rePayDate.FindAllStringSubmatch(sms, -1)
+	if len(all) == 0 {
+		return nil, fmt.Errorf("payment date not found")
+	}
+	d, err := parseNoticeDate(all[len(all)-1][1])
+	if err != nil {
+		return nil, fmt.Errorf("payment date: %w", err)
+	}
+	n.Date = d
+	return n, nil
 }
