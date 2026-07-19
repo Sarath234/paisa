@@ -7,11 +7,13 @@
   import Spinner from "$lib/components/Spinner.svelte";
   import Navbar from "$lib/components/Navbar.svelte";
   import QuickEntryModal from "$lib/components/QuickEntryModal.svelte";
+  import StatementUploadModal from "$lib/components/StatementUploadModal.svelte";
   import SearchModal from "$lib/components/SearchModal.svelte";
   import ChatWidget from "$lib/components/ChatWidget.svelte";
   import { willClearTippy, willRefresh } from "../../store";
 
   let quickEntryActive = false;
+  let statementUploadActive = false;
   let searchActive = false;
 
   let isBurger: boolean = null;
@@ -84,6 +86,7 @@
 </script>
 
 <QuickEntryModal bind:active={quickEntryActive} />
+<StatementUploadModal bind:active={statementUploadActive} />
 <SearchModal bind:active={searchActive} />
 {#if $page.url.pathname !== "/assistant"}
   <ChatWidget />
@@ -93,6 +96,7 @@
   <Navbar
     bind:isBurger
     on:quickentry={() => (quickEntryActive = true)}
+    on:statementupload={() => (statementUploadActive = true)}
     on:search={() => (searchActive = true)}
   />
 
