@@ -256,6 +256,42 @@ func TestStatusRejectsPaths(t *testing.T) {
 	}
 }
 
+func TestStatusNameCollisionNewestWins(t *testing.T) {
+	drop := t.TempDir()
+	os.MkdirAll(filepath.Join(drop, "processed"), 0755)
+	os.MkdirAll(filepath.Join(drop, "failed"), 0755)
+	processed := filepath.Join(drop, "processed", "x.pdf")
+	failed := filepath.Join(drop, "failed", "x.pdf")
+	os.WriteFile(processed, []byte("%PDF"), 0644)
+	os.WriteFile(failed, []byte("%PDF"), 0644)
+
+	h := statementStatusHandler(drop, nil, t.TempDir())
+	base := time.Now().Add(-time.Hour)
+
+	// failed/ is newer than processed/ → re-upload failed after an old success.
+	if err := os.Chtimes(processed, base, base); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(failed, base.Add(time.Minute), base.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	h(rr, statusReq("x.pdf"))
+	if !strings.Contains(rr.Body.String(), `"failed"`) {
+		t.Fatalf("failed newer: body %s", rr.Body.String())
+	}
+
+	// processed/ is newer than failed/ → old failure, later success.
+	if err := os.Chtimes(processed, base.Add(2*time.Minute), base.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	rr = httptest.NewRecorder()
+	h(rr, statusReq("x.pdf"))
+	if !strings.Contains(rr.Body.String(), `"done"`) {
+		t.Fatalf("processed newer: body %s", rr.Body.String())
+	}
+}
+
 func TestStatusUnconfigured503(t *testing.T) {
 	h := statementStatusHandler("", nil, t.TempDir())
 	rr := httptest.NewRecorder()

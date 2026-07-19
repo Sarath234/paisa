@@ -153,13 +153,25 @@ func statementStatusHandler(dropDir string, matches []dropfolder.AccountMatch, j
 			return
 		}
 		resp := statusResponse{Status: "unknown"}
+		procInfo, procErr := os.Stat(filepath.Join(dropDir, "processed", name))
+		failInfo, failErr := os.Stat(filepath.Join(dropDir, "failed", name))
 		switch {
 		case fileExists(filepath.Join(dropDir, name)):
+			// A fresh upload waiting in the drop dir always wins.
 			resp.Status = "queued"
-		case fileExists(filepath.Join(dropDir, "processed", name)):
+		case procErr == nil && failErr == nil:
+			// Name collision: a re-upload landed in the other folder. The
+			// newer file reflects the latest processing outcome.
+			if failInfo.ModTime().After(procInfo.ModTime()) {
+				resp.Status = "failed"
+			} else {
+				resp.Status = "done"
+				resp.Summary = summaryFor(name, matches, journalDir)
+			}
+		case procErr == nil:
 			resp.Status = "done"
 			resp.Summary = summaryFor(name, matches, journalDir)
-		case fileExists(filepath.Join(dropDir, "failed", name)):
+		case failErr == nil:
 			resp.Status = "failed"
 		}
 		w.Header().Set("Content-Type", "application/json")
