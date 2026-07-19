@@ -317,6 +317,15 @@
                 <span class="icon is-small"><i class="fas fa-plus" /></span>
               </button>
             </p>
+            <p class="control">
+              <button
+                class="button is-small is-rounded"
+                data-tippy-content="<p>Upload statement PDF</p>"
+                on:click={() => dispatch("statementupload")}
+              >
+                <span class="icon is-small"><i class="fas fa-file-arrow-up" /></span>
+              </button>
+            </p>
           {/if}
 
           <p class="control">
