@@ -2,21 +2,26 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/agent/approval"
+	"github.com/ananthakumaran/paisa/internal/agent/billtruth"
+	"github.com/ananthakumaran/paisa/internal/agent/ccrecon"
 	"github.com/ananthakumaran/paisa/internal/agent/config"
 	"github.com/ananthakumaran/paisa/internal/agent/dropfolder"
 	"github.com/ananthakumaran/paisa/internal/agent/gmail"
 	agentledger "github.com/ananthakumaran/paisa/internal/agent/ledger"
 	"github.com/ananthakumaran/paisa/internal/agent/llm"
 	"github.com/ananthakumaran/paisa/internal/agent/monitor"
+	"github.com/ananthakumaran/paisa/internal/agent/notices"
 	"github.com/ananthakumaran/paisa/internal/agent/paisaclient"
 	"github.com/ananthakumaran/paisa/internal/agent/qa"
 	"github.com/ananthakumaran/paisa/internal/agent/reconcile"
@@ -52,6 +57,30 @@ func main() {
 
 	parsers := []statement.Parser{&statement.AxisParser{}}
 	pc := paisaclient.New(cfg.Paisa.URL)
+
+	truthStore, err := billtruth.Open(cfg.Paisa.JournalDir)
+	if err != nil {
+		log.Fatalf("billtruth: open store: %v", err)
+	}
+
+	store := approval.NewStore()
+
+	ccParsers := map[string]statement.CCParser{
+		"icici_cc": &statement.ICICICCParser{},
+		"axis_cc":  &statement.AxisCCParser{},
+		"hdfc_cc":  &statement.HDFCCCParser{},
+	}
+	ccreconDeps := &ccrecon.Deps{
+		Store:      truthStore,
+		Parsers:    ccParsers,
+		Client:     pc,
+		Approvals:  store,
+		Bot:        bot,
+		ChatID:     cfg.Telegram.ChatID,
+		Merchants:  cfg.ParserRules.Merchants,
+		JournalDir: cfg.Paisa.JournalDir,
+		MaxCards:   10,
+	}
 
 	var gmailClient *gmail.Client
 	var gmailPoller *gmail.Poller
@@ -112,10 +141,15 @@ func main() {
 			matches = append(matches, dropfolder.AccountMatch{
 				Pattern:       a.FilenameMatch,
 				LedgerAccount: a.LedgerAccount,
+				Kind:          a.Kind,
+				Password:      a.PDFPassword,
 			})
 		}
 		dropPoller := dropfolder.New(cfg.Statements.DropDir, matches,
 			func(s dropfolder.Statement) error {
+				if s.Kind == "credit_card" {
+					return ccreconDeps.HandleCCStatement(s.Filename, s.PDFBytes, s.LedgerAccount, s.Password)
+				}
 				return handleStatement(s.Filename, s.PDFBytes, s.LedgerAccount, parsers, pc, cfg.Paisa.JournalDir, bot)
 			},
 			func(msg string) {
@@ -134,20 +168,39 @@ func main() {
 		}
 		cc := cfg.Monitors.CreditCards
 		hour := cfg.Monitors.DigestHour
-		ccInterest := monitor.NewCCInterest(pc, cc.InterestPatterns, hour)
+		ccInterest := monitor.NewCCInterest(truthStore, pc, cc.InterestPatterns, hour)
 		ccInterest.Sent = monStore.WasSent
+		ccStatement := monitor.NewCCStatement(truthStore, hour)
+		ccStatement.SentPrefix = monStore.WasSentPrefix
+		ccStatement.Sent = monStore.WasSent
 		mons := []monitor.Monitor{
-			monitor.NewCCDue(pc, cc.DueReminderDays, hour),
-			monitor.NewCCStatement(pc, hour),
+			// apiSyncMonitor must run first each pass: it fills billtruth
+			// holes from paisa's computed bills before cc_due reads the
+			// store, so a card with no SMS/PDF facts yet still gets
+			// reminders.
+			&apiSyncMonitor{store: truthStore, client: pc, due: monitor.DailyAt(hour)},
+			monitor.NewCCDue(truthStore, cc.DueReminderDays, hour),
+			ccStatement,
 			monitor.NewCCUtilization(pc, cc.UtilizationBands, hour),
 			ccInterest,
+			monitor.NewCCTruthGap(truthStore, pc, cc.TruthGapDays, hour),
 		}
 		sched := monitor.NewScheduler(mons, monitor.NewNotifier(bot, monStore), monStore, hour)
 		go sched.Start()
 		log.Infof("monitor: scheduler started (%d monitors, digest at %02d:00)", len(mons), hour)
 	}
 
-	store := approval.NewStore()
+	cardsByLast4 := map[string]string{}
+	for _, r := range cfg.ParserRules.Accounts {
+		dest := r.Destinations
+		if strings.HasPrefix(dest, "Liabilities:CreditCard:") && len(dest) >= 4 {
+			last4 := dest[len(dest)-4:]
+			if _, err := strconv.Atoi(last4); err == nil {
+				cardsByLast4[last4] = dest
+			}
+		}
+	}
+
 	ruleStore := rulelearning.NewStore()
 
 	smsCap := &sms.Capability{Bot: bot, Store: store, Cfg: cfg}
@@ -159,9 +212,12 @@ func main() {
 			Now:    time.Now,
 		},
 	}
+	noticesCap := notices.NewCapability(truthStore, bot, cardsByLast4)
 
 	rt := router.New(
-		[]router.Capability{smsCap, qaCap},
+		// notices MUST precede sms: statement/payment notice SMSes must never
+		// fall through to transaction parsing.
+		[]router.Capability{noticesCap, smsCap, qaCap},
 		func(text string) (string, error) {
 			return llm.ClassifyIntent(text, intents, cfg.Ollama)
 		},
@@ -186,7 +242,7 @@ func main() {
 		for _, u := range updates {
 			switch {
 			case u.CallbackQuery != nil:
-				handleCallback(u.CallbackQuery, bot, store, ruleStore, cfg, *cfgPath)
+				handleCallback(u.CallbackQuery, bot, store, ruleStore, ccreconDeps, cfg, *cfgPath, pc)
 			case u.Message != nil:
 				if u.Message.Chat.ID != cfg.Telegram.ChatID {
 					continue
@@ -201,13 +257,33 @@ func main() {
 	}
 }
 
+// apiSyncMonitor fills billtruth holes from paisa's computed bills
+// (fill-holes-only: never overwrites sms/pdf facts). It emits no insights of
+// its own; it must run before cc_due in the monitor slice so a card with no
+// SMS/PDF facts yet still has a bill for cc_due to read.
+type apiSyncMonitor struct {
+	store  *billtruth.Store
+	client billtruth.CreditCardLister
+	due    func(now, lastRun time.Time) bool
+}
+
+func (m *apiSyncMonitor) Name() string { return "billtruth_api_sync" }
+
+func (m *apiSyncMonitor) Due(now, lastRun time.Time) bool { return m.due(now, lastRun) }
+
+func (m *apiSyncMonitor) Check(ctx context.Context) ([]monitor.Insight, error) {
+	return nil, billtruth.SyncFromAPI(m.store, m.client)
+}
+
 func handleCallback(
 	cb *telegram.CallbackQuery,
 	bot *telegram.Bot,
 	store *approval.Store,
 	ruleStore *rulelearning.Store,
+	ccreconDeps *ccrecon.Deps,
 	cfg *config.Config,
 	cfgPath string,
+	pc *paisaclient.Client,
 ) {
 	bot.AnswerCallback(cb.ID)
 
@@ -219,7 +295,15 @@ func handleCallback(
 	}
 	msgID := cb.Message.MessageID
 
-	switch strings.ToLower(cb.Data) {
+	data := strings.ToLower(cb.Data)
+	if handled, err := ccreconDeps.HandleCallback(data, msgID); handled {
+		if err != nil {
+			log.Errorf("ccrecon: handle callback %q: %v", data, err)
+		}
+		return
+	}
+
+	switch data {
 	case "approve":
 		pending := store.Get(msgID)
 		if pending == nil {
@@ -234,6 +318,13 @@ func handleCallback(
 		}
 		bot.EditMessage(msgID, "✅ Posted\n\n"+telegram.FormatDraft(pending.Entry))
 		log.Infof("posted: %s %s %s", pending.Entry.Date, pending.Entry.Desc, pending.Entry.Amt)
+
+		// Re-sync paisa's journal cache so a re-dropped statement PDF sees
+		// this just-approved entry in Postings() and doesn't re-report it
+		// as missing. Non-fatal: the entry is already on disk either way.
+		if err := pc.SyncJournal(); err != nil {
+			log.Warnf("sync journal after approve: %v", err)
+		}
 
 		// Rule learning: propose a merchant rule if dest was corrected
 		kw, acc, desc, ok := rulelearning.Derive(pending.Original, pending.Entry)

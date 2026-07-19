@@ -68,6 +68,27 @@ func TestStoreCorruptFile(t *testing.T) {
 	}
 }
 
+func TestStoreWasSentPrefix(t *testing.T) {
+	dir := t.TempDir()
+	s, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.WasSentPrefix("cc-stmt/Liabilities:CreditCard:ICIC6009/2026-07-10/") {
+		t.Fatal("fresh store: prefix should be unmatched")
+	}
+	s.MarkSent("cc-stmt/Liabilities:CreditCard:ICIC6009/2026-07-10/23451")
+	if !s.WasSentPrefix("cc-stmt/Liabilities:CreditCard:ICIC6009/2026-07-10/") {
+		t.Error("want prefix match on exact-prefix key")
+	}
+	if s.WasSentPrefix("cc-stmt/Liabilities:CreditCard:ICIC6009/2026-08-10/") {
+		t.Error("different period prefix must not match")
+	}
+	if s.WasSentPrefix("cc-stmt/Liabilities:CreditCard:HDFC/") {
+		t.Error("different account prefix must not match")
+	}
+}
+
 func TestStorePrunesOldSentKeys(t *testing.T) {
 	dir := t.TempDir()
 	s, err := OpenStore(dir)

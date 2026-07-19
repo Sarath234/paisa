@@ -45,6 +45,24 @@ func TestPollOnceProcessesMatchedPDF(t *testing.T) {
 	}
 }
 
+func TestPollOnceCarriesKindAndPasswordFromMatch(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Axis-CC-July.pdf", time.Minute)
+
+	var got Statement
+	p := New(dir, []AccountMatch{{
+		Pattern:       "*axis*",
+		LedgerAccount: "Liabilities:CreditCard:Axis",
+		Kind:          "credit_card",
+		Password:      "pw123",
+	}}, func(s Statement) error { got = s; return nil }, func(string) {})
+	p.PollOnce()
+
+	if got.Kind != "credit_card" || got.Password != "pw123" {
+		t.Fatalf("kind/password not passed through: %+v", got)
+	}
+}
+
 func TestPollOnceDispositions(t *testing.T) {
 	t.Run("handler error → failed/", func(t *testing.T) {
 		dir := t.TempDir()

@@ -6,17 +6,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ananthakumaran/paisa/internal/agent/paisaclient"
+	"github.com/ananthakumaran/paisa/internal/agent/billtruth"
 )
 
 func TestCCStatementFiresAfterPeriodCloses(t *testing.T) {
-	bill := paisaclient.CreditCardBill{
-		StatementStartDate: day("2026-06-16"),
-		StatementEndDate:   day("2026-07-15"),
-		DueDate:            day("2026-07-28"),
-		ClosingBalance:     31200,
+	s := truthStore(t, billtruth.Bill{
+		Account:   "Liabilities:CreditCard:Axis",
+		PeriodEnd: day("2026-07-15"), DueDate: day("2026-07-28"), TotalDue: 31200,
+	})
+	// truthStore doesn't set PeriodStart; apply it directly onto the same bill.
+	start, end := day("2026-06-16"), day("2026-07-15")
+	if _, err := s.Apply(billtruth.Facts{
+		Account: "Liabilities:CreditCard:Axis", PeriodEnd: &end, PeriodStart: &start,
+		Source: billtruth.AuthoritySMS,
+	}); err != nil {
+		t.Fatal(err)
 	}
-	m := NewCCStatement(&fakeFetcher{cards: []paisaclient.CreditCardSummary{cardWithBill(bill)}}, 8)
+
+	m := NewCCStatement(s, 8)
 
 	// period not yet closed
 	m.Now = func() time.Time { return day("2026-07-15").Add(9 * time.Hour) }
@@ -38,7 +45,7 @@ func TestCCStatementFiresAfterPeriodCloses(t *testing.T) {
 		t.Fatalf("want 1 insight: %+v", insights)
 	}
 	in := insights[0]
-	if in.Key != "cc-stmt/Liabilities:CreditCard:Axis/2026-07-15" {
+	if in.Key != "cc-stmt/Liabilities:CreditCard:Axis/2026-07/31200" {
 		t.Errorf("key: %q", in.Key)
 	}
 	if in.Urgency != Digest {
@@ -52,61 +59,176 @@ func TestCCStatementFiresAfterPeriodCloses(t *testing.T) {
 }
 
 func TestCCStatementUsesLatestBill(t *testing.T) {
-	card := paisaclient.CreditCardSummary{
-		Account: "Liabilities:CreditCard:Axis",
-		Bills: []paisaclient.CreditCardBill{
-			{StatementStartDate: day("2026-05-16"), StatementEndDate: day("2026-06-15"), ClosingBalance: 900},
-			{StatementStartDate: day("2026-06-16"), StatementEndDate: day("2026-07-15"), ClosingBalance: 31200},
-		},
-	}
-	m := NewCCStatement(&fakeFetcher{cards: []paisaclient.CreditCardSummary{card}}, 8)
+	s := truthStore(t,
+		billtruth.Bill{Account: "Liabilities:CreditCard:Axis", PeriodEnd: day("2026-06-15"), DueDate: day("2026-06-28"), TotalDue: 900},
+		billtruth.Bill{Account: "Liabilities:CreditCard:Axis", PeriodEnd: day("2026-07-15"), DueDate: day("2026-07-28"), TotalDue: 31200},
+	)
+	m := NewCCStatement(s, 8)
 	m.Now = func() time.Time { return day("2026-07-16").Add(8 * time.Hour) }
 	insights, err := m.Check(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(insights) != 1 || !strings.Contains(insights[0].Key, "2026-07-15") {
+	if len(insights) != 1 || !strings.Contains(insights[0].Key, "2026-07") {
 		t.Fatalf("insights: %+v", insights)
 	}
 }
 
-// TestCCStatementAnnouncesClosedStatementWhileOpenCycleExists reproduces the
-// production shape: an actively-used card carries an open current cycle
-// (future StatementEndDate, future DueDate, PaidDate nil) alongside the just
-// closed statement. cc_statement must announce the closed statement, not the
-// open cycle (which would have the later StatementEndDate).
-func TestCCStatementAnnouncesClosedStatementWhileOpenCycleExists(t *testing.T) {
-	card := paisaclient.CreditCardSummary{
-		Account: "Liabilities:CreditCard:Axis",
-		Bills: []paisaclient.CreditCardBill{
-			{ // just closed
-				StatementStartDate: day("2026-06-16"),
-				StatementEndDate:   day("2026-07-15"),
-				DueDate:            day("2026-07-28"),
-				ClosingBalance:     31200,
-			},
-			{ // open current cycle
-				StatementStartDate: day("2026-07-16"),
-				StatementEndDate:   day("2026-08-15"),
-				DueDate:            day("2026-08-28"),
-				ClosingBalance:     4500,
-			},
-		},
+// sentPrefixOver builds a SentPrefix func backed by a plain sent-key set,
+// mirroring how monitor.Store.WasSentPrefix scans the real sent-key map.
+func sentPrefixOver(sent map[string]bool) func(prefix string) bool {
+	return func(prefix string) bool {
+		for k := range sent {
+			if strings.HasPrefix(k, prefix) {
+				return true
+			}
+		}
+		return false
 	}
-	m := NewCCStatement(&fakeFetcher{cards: []paisaclient.CreditCardSummary{card}}, 8)
-	m.Now = func() time.Time { return day("2026-07-18").Add(8 * time.Hour) }
+}
+
+// TestCCStatementCorrectionFiresOncePDFDiffers exercises the final
+// correction design: the announce key embeds the rounded total
+// (cc-stmt/<account>/<period>/<amount>), so a PDF that changes the total
+// produces a NEW key under the same "cc-stmt/" namespace. The monitor
+// recognizes the prior announcement via SentPrefix on the account/period
+// prefix and, since Sources["total_due"] is PDF, formats this one as a
+// correction rather than a fresh announcement.
+func TestCCStatementCorrectionFiresOncePDFDiffers(t *testing.T) {
+	s := truthStore(t, billtruth.Bill{
+		Account:   "Liabilities:CreditCard:ICIC6009",
+		PeriodEnd: day("2026-07-10"), DueDate: day("2026-07-30"), TotalDue: 23450.50,
+	})
+	m := NewCCStatement(s, 8)
+	m.Now = func() time.Time { return day("2026-07-16").Add(8 * time.Hour) }
+	sent := map[string]bool{}
+	m.SentPrefix = sentPrefixOver(sent)
+	m.Sent = func(key string) bool { return sent[key] }
+
+	first, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) != 1 || !strings.HasPrefix(first[0].Key, "cc-stmt/") {
+		t.Fatalf("%+v", first)
+	}
+	sent[first[0].Key] = true
+
+	// PDF corrects total by more than ₹1
+	end, total := day("2026-07-10"), 24100.00
+	if _, err := s.Apply(billtruth.Facts{
+		Account: "Liabilities:CreditCard:ICIC6009", PeriodEnd: &end, TotalDue: &total,
+		Source: billtruth.AuthorityPDF,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second) != 1 || !strings.HasPrefix(second[0].Key, "cc-stmt/") {
+		t.Fatalf("want correction insight: %+v", second)
+	}
+	if second[0].Key == first[0].Key {
+		t.Fatalf("corrected amount must produce a distinct key: %q", second[0].Key)
+	}
+	if !strings.Contains(second[0].Title, "24100.00") {
+		t.Errorf("%q", second[0].Title)
+	}
+	if !strings.Contains(second[0].Title, "corrected") {
+		t.Errorf("want correction wording: %q", second[0].Title)
+	}
+
+	// Once delivered, a further Check with nothing new must stay quiet.
+	sent[second[0].Key] = true
+	third, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(third) != 0 {
+		t.Fatalf("settled bill must be quiet: %+v", third)
+	}
+}
+
+// TestCCStatementNoCorrectionWithoutPDFSource guards against api-noise:
+// a total_due change whose source isn't PDF (e.g. an API refresh reusing an
+// older, lower-authority guess) must never be rendered as a "corrected"
+// insight — it's emitted (if at all) as a plain announcement under its own
+// new key.
+func TestCCStatementNoCorrectionWithoutPDFSource(t *testing.T) {
+	s := truthStore(t, billtruth.Bill{
+		Account:   "Liabilities:CreditCard:ICIC6009",
+		PeriodEnd: day("2026-07-10"), DueDate: day("2026-07-30"), TotalDue: 23450.50,
+	})
+	m := NewCCStatement(s, 8)
+	m.Now = func() time.Time { return day("2026-07-16").Add(8 * time.Hour) }
+	sent := map[string]bool{}
+	m.SentPrefix = sentPrefixOver(sent)
+	m.Sent = func(key string) bool { return sent[key] }
+
+	first, _ := m.Check(context.Background())
+	sent[first[0].Key] = true
+
+	// SMS (same authority, so it CAN change the value) nudges the total.
+	end, total := day("2026-07-10"), 23460.00
+	if _, err := s.Apply(billtruth.Facts{
+		Account: "Liabilities:CreditCard:ICIC6009", PeriodEnd: &end, TotalDue: &total,
+		Source: billtruth.AuthoritySMS,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second) != 1 {
+		t.Fatalf("%+v", second)
+	}
+	if strings.Contains(second[0].Title, "corrected") {
+		t.Errorf("non-PDF source must not be announced as a correction: %q", second[0].Title)
+	}
+}
+
+// TestCCStatementExactSentCheckAvoidsLeadingDigitCollision guards the fix
+// for using SentPrefix on the FULL announce key as an "already sent" check:
+// "cc-stmt/acct/2026-07/100" is itself a string prefix of an already-sent
+// "cc-stmt/acct/2026-07/1004" key, so a SentPrefix-based exact check would
+// wrongly treat the unrelated ₹100 bill as already delivered and go quiet.
+// The monitor must use exact Sent (Store.WasSent) for that check instead;
+// SentPrefix is only for the "any announcement under this account/month"
+// correction check.
+func TestCCStatementExactSentCheckAvoidsLeadingDigitCollision(t *testing.T) {
+	s := truthStore(t, billtruth.Bill{
+		Account:   "Liabilities:CreditCard:ICIC6009",
+		PeriodEnd: day("2026-07-10"), DueDate: day("2026-07-30"), TotalDue: 100,
+	})
+	m := NewCCStatement(s, 8)
+	m.Now = func() time.Time { return day("2026-07-16").Add(8 * time.Hour) }
+	// A DIFFERENT bill in the same account/month already announced at ₹1004 —
+	// "...2026-07/100" is a string prefix of "...2026-07/1004".
+	sent := map[string]bool{
+		"cc-stmt/Liabilities:CreditCard:ICIC6009/2026-07/1004": true,
+	}
+	m.SentPrefix = sentPrefixOver(sent)
+	m.Sent = func(key string) bool { return sent[key] }
 
 	insights, err := m.Check(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
+	// SMS-sourced bill: SentPrefix(prefix) is true (₹1004 was sent under
+	// this account/month) but Sources["total_due"] isn't PDF, so this must
+	// NOT be treated as a correction either — it falls through to a plain
+	// announcement of the distinct ₹100 key, not silence.
 	if len(insights) != 1 {
-		t.Fatalf("insights: %+v", insights)
+		t.Fatalf("leading-digit collision must not suppress a distinct amount: %+v", insights)
 	}
-	if !strings.Contains(insights[0].Key, "2026-07-15") {
-		t.Errorf("key: %q, want the closed bill's statement end date", insights[0].Key)
+	if insights[0].Key != "cc-stmt/Liabilities:CreditCard:ICIC6009/2026-07/100" {
+		t.Errorf("key: %q", insights[0].Key)
 	}
-	if !strings.Contains(insights[0].Title, "₹31200.00") {
-		t.Errorf("title: %q, want the closed bill's ClosingBalance, not the open cycle's", insights[0].Title)
+	if strings.Contains(insights[0].Title, "corrected") {
+		t.Errorf("non-PDF source must not be announced as a correction: %q", insights[0].Title)
 	}
 }

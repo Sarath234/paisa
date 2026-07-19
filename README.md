@@ -83,6 +83,7 @@ monitors:
     due_reminder_days: [3, 1, 0]     # days before the due date to remind (0 = on the day)
     utilization_bands: [50, 75, 90]  # warn when utilization crosses these percentages
     interest_patterns: ["INTEREST", "LATE FEE"]  # payee substrings that count as interest/fees
+    truth_gap_days: 3         # nudge if no statement SMS/PDF arrives N days after the computed cycle close
 ```
 
 Credit cards themselves are configured in Paisa (`paisa.yaml` → `credit_cards:`); the monitors read them via the Paisa API. Monitor state (dedupe keys, digest queue) is stored as `monitor-state.json` in `paisa.journal_dir`.
@@ -97,9 +98,15 @@ statements:
   accounts:
     - filename_match: "*6386*"       # case-insensitive glob matched against the file name
       ledger_account: "Assets:Checking:AXIS6386"
+    - filename_match: "*6009*"
+      ledger_account: "Liabilities:CreditCard:ICIC6009"
+      kind: credit_card                  # routes to CC reconciliation instead of plain statement matching
+      pdf_password: "<statement password>"  # only needed if the bank encrypts the PDF
 ```
 
 Matched PDFs are parsed and reconciled exactly like Gmail statements. Processed files move to `<drop_dir>/processed/`; unmatched or unparseable files move to `<drop_dir>/failed/` with a Telegram notification.
+
+**Credit card statement truth:** For `kind: credit_card` accounts, bill facts (statement period, due date, total/min due, paid date/amount) are tracked in a small truth store instead of being re-derived each time. Forwarded statement and payment notice SMSes update these facts at *SMS authority*; a dropped statement PDF overrides them at *PDF authority* (higher confidence — SMS text is short and lossy). On drop, reconciliation compares the statement's transaction lines against the ledger for that cycle and sends inline-button cards: approve-to-add for transactions missing from the ledger, confirm-to-remove for ledger entries that look like duplicates not present in the statement (only offered when the entry can be uniquely located in the journal, and the journal file is backed up before any edit). This state — one record per card — lives in `bill-truth.json` in `paisa.journal_dir`.
 
 ## Status
 

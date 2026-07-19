@@ -17,12 +17,16 @@ import (
 type AccountMatch struct {
 	Pattern       string // filepath glob, matched case-insensitively against the base name
 	LedgerAccount string
+	Kind          string
+	Password      string
 }
 
 type Statement struct {
 	Filename      string
 	PDFBytes      []byte
 	LedgerAccount string
+	Kind          string
+	Password      string
 }
 
 type Poller struct {
@@ -80,7 +84,7 @@ func (p *Poller) PollOnce() {
 func (p *Poller) process(name string) {
 	path := filepath.Join(p.dir, name)
 
-	account := ""
+	var matched *AccountMatch
 	for _, m := range p.matches {
 		ok, err := filepath.Match(strings.ToLower(m.Pattern), strings.ToLower(name))
 		if err != nil {
@@ -88,11 +92,11 @@ func (p *Poller) process(name string) {
 			continue
 		}
 		if ok {
-			account = m.LedgerAccount
+			matched = &m
 			break
 		}
 	}
-	if account == "" {
+	if matched == nil {
 		p.notify(fmt.Sprintf("❌ Statement file %q matches no configured account — moved to failed/", name))
 		p.moveTo(name, "failed")
 		return
@@ -105,7 +109,14 @@ func (p *Poller) process(name string) {
 		return
 	}
 
-	if err := p.handler(Statement{Filename: name, PDFBytes: data, LedgerAccount: account}); err != nil {
+	stmt := Statement{
+		Filename:      name,
+		PDFBytes:      data,
+		LedgerAccount: matched.LedgerAccount,
+		Kind:          matched.Kind,
+		Password:      matched.Password,
+	}
+	if err := p.handler(stmt); err != nil {
 		log.Warnf("dropfolder: handle %s: %v", name, err)
 		p.moveTo(name, "failed")
 		return

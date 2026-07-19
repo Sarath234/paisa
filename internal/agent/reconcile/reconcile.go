@@ -3,6 +3,7 @@ package reconcile
 
 import (
 	"math"
+	"sort"
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/agent/statement"
@@ -26,6 +27,7 @@ type Diff struct {
 }
 
 const amountEpsilon = 0.01
+const ccDateWindowDays = 3
 
 // Compare matches statement transactions against ledger entries by date + |amount|.
 // A statement debit of 500 matches a ledger entry with Amount -500 on the same date.
@@ -65,6 +67,69 @@ func Compare(result statement.ParseResult, ledger []LedgerEntry) Diff {
 		}
 	}
 
+	return diff
+}
+
+// CompareCC matches CC statement transactions against ledger entries:
+// amount exact (±0.01) + date within ±3 days. Statement transactions are
+// processed in date order and each takes the EARLIEST-dated unused ledger
+// candidate in its window. Because window compatibility is contiguous in
+// date (a convex bipartite graph), sorted-by-date + earliest-available is
+// the standard optimal greedy for this matching: it finds a full pairing
+// whenever one exists. Closest-date greedy is order-sensitive and can
+// strand a pairable pair, yielding a false Missing + Extra.
+func CompareCC(res statement.CCResult, ledger []LedgerEntry) Diff {
+	diff := Diff{
+		Month:          int(res.PeriodEnd.Month()),
+		Year:           res.PeriodEnd.Year(),
+		StatementClose: res.TotalDue,
+	}
+
+	// Process statement transactions in date order without mutating the input.
+	order := make([]int, len(res.Transactions))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		return res.Transactions[order[a]].Date.Before(res.Transactions[order[b]].Date)
+	})
+
+	used := make([]bool, len(ledger))
+	window := ccDateWindowDays * 24 * time.Hour
+	for _, ti := range order {
+		tx := res.Transactions[ti]
+		txAmt := tx.Credit - tx.Debit
+		best := -1
+		for i, le := range ledger {
+			if used[i] {
+				continue
+			}
+			if math.Abs(le.Amount-txAmt) > amountEpsilon {
+				continue
+			}
+			gap := le.Date.Sub(tx.Date)
+			if gap < 0 {
+				gap = -gap
+			}
+			if gap > window {
+				continue
+			}
+			// Earliest-dated candidate wins; equal dates: lowest index.
+			if best < 0 || le.Date.Before(ledger[best].Date) {
+				best = i
+			}
+		}
+		if best >= 0 {
+			used[best] = true
+		} else {
+			diff.Missing = append(diff.Missing, tx.Transaction)
+		}
+	}
+	for i, le := range ledger {
+		if !used[i] {
+			diff.Extra = append(diff.Extra, le)
+		}
+	}
 	return diff
 }
 

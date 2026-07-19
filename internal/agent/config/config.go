@@ -80,6 +80,7 @@ type CreditCardsMonitorConfig struct {
 	DueReminderDays  []int    `yaml:"due_reminder_days"`
 	UtilizationBands []int    `yaml:"utilization_bands"`
 	InterestPatterns []string `yaml:"interest_patterns"`
+	TruthGapDays     int      `yaml:"truth_gap_days"`
 }
 
 type StatementsConfig struct {
@@ -90,11 +91,16 @@ type StatementsConfig struct {
 type DropfolderAccount struct {
 	FilenameMatch string `yaml:"filename_match"`
 	LedgerAccount string `yaml:"ledger_account"`
+	Kind          string `yaml:"kind"` // "" | "checking" | "credit_card"
+	PDFPassword   string `yaml:"pdf_password"`
 }
 
 func (m *MonitorsConfig) setDefaults() {
 	if m.DigestHour == 0 {
 		m.DigestHour = 8
+	}
+	if m.CreditCards.TruthGapDays == 0 {
+		m.CreditCards.TruthGapDays = 3
 	}
 	if len(m.CreditCards.DueReminderDays) == 0 {
 		m.CreditCards.DueReminderDays = []int{3, 1, 0}
@@ -121,6 +127,9 @@ func Load(path string) (*Config, error) {
 		if h := cfg.Monitors.DigestHour; h < 0 || h > 23 {
 			return nil, fmt.Errorf("monitors.digest_hour must be between 0 and 23, got %d", h)
 		}
+		if tg := cfg.Monitors.CreditCards.TruthGapDays; tg < 1 {
+			return nil, fmt.Errorf("monitors.credit_cards.truth_gap_days must be >= 1, got %d", tg)
+		}
 	}
 	if cfg.Statements != nil && strings.HasPrefix(cfg.Statements.DropDir, "~/") {
 		home, err := os.UserHomeDir()
@@ -128,6 +137,15 @@ func Load(path string) (*Config, error) {
 			return nil, err
 		}
 		cfg.Statements.DropDir = filepath.Join(home, cfg.Statements.DropDir[2:])
+	}
+	if cfg.Statements != nil {
+		for i, a := range cfg.Statements.Accounts {
+			switch a.Kind {
+			case "", "checking", "credit_card":
+			default:
+				return nil, fmt.Errorf("statements.accounts[%d].kind must be checking or credit_card, got %q", i, a.Kind)
+			}
+		}
 	}
 	return &cfg, nil
 }
