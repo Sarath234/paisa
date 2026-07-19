@@ -134,11 +134,13 @@ func main() {
 		}
 		cc := cfg.Monitors.CreditCards
 		hour := cfg.Monitors.DigestHour
+		ccInterest := monitor.NewCCInterest(pc, cc.InterestPatterns, hour)
+		ccInterest.Sent = monStore.WasSent
 		mons := []monitor.Monitor{
 			monitor.NewCCDue(pc, cc.DueReminderDays, hour),
 			monitor.NewCCStatement(pc, hour),
 			monitor.NewCCUtilization(pc, cc.UtilizationBands, hour),
-			monitor.NewCCInterest(pc, cc.InterestPatterns, hour),
+			ccInterest,
 		}
 		sched := monitor.NewScheduler(mons, monitor.NewNotifier(bot, monStore), monStore, hour)
 		go sched.Start()

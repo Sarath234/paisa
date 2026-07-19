@@ -14,10 +14,12 @@ import (
 // backs CreditCard(account); a missing key yields the not-found (nil, nil)
 // result, mirroring the real server's {"found": false} response.
 type fakeFetcher struct {
-	cards     []paisaclient.CreditCardSummary
-	err       error
-	detail    map[string]*paisaclient.CreditCardSummary
-	detailErr error
+	cards       []paisaclient.CreditCardSummary
+	err         error
+	detail      map[string]*paisaclient.CreditCardSummary
+	detailErr   error
+	detailErrs  map[string]error // per-account detail errors
+	detailCalls int
 }
 
 func (f *fakeFetcher) CreditCards() ([]paisaclient.CreditCardSummary, error) {
@@ -25,8 +27,12 @@ func (f *fakeFetcher) CreditCards() ([]paisaclient.CreditCardSummary, error) {
 }
 
 func (f *fakeFetcher) CreditCard(account string) (*paisaclient.CreditCardSummary, error) {
+	f.detailCalls++
 	if f.detailErr != nil {
 		return nil, f.detailErr
+	}
+	if err := f.detailErrs[account]; err != nil {
+		return nil, err
 	}
 	card, ok := f.detail[account]
 	if !ok {

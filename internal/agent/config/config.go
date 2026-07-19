@@ -2,6 +2,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -117,6 +118,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Monitors != nil {
 		cfg.Monitors.setDefaults()
+		if h := cfg.Monitors.DigestHour; h < 0 || h > 23 {
+			return nil, fmt.Errorf("monitors.digest_hour must be between 0 and 23, got %d", h)
+		}
 	}
 	if cfg.Statements != nil && strings.HasPrefix(cfg.Statements.DropDir, "~/") {
 		home, err := os.UserHomeDir()
