@@ -67,12 +67,12 @@ func statementUploadHandler(dropDir string, kick func()) http.HandlerFunc {
 			return
 		}
 
-		name := sanitizeFilename(header.Filename)
-		path, name := collisionFreePath(dropDir, name)
-		if err := os.WriteFile(path, data, 0644); err != nil {
+		name, err := createCollisionFree(dropDir, sanitizeFilename(header.Filename), data)
+		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "store upload: "+err.Error())
 			return
 		}
+		path := filepath.Join(dropDir, name)
 		past := time.Now().Add(-uploadBackdate)
 		if err := os.Chtimes(path, past, past); err != nil {
 			// Non-fatal: file just waits out MinAge on the regular tick.
@@ -93,16 +93,33 @@ func sanitizeFilename(raw string) string {
 	return base
 }
 
-// collisionFreePath appends -1, -2… before the extension until unused.
-func collisionFreePath(dir, name string) (string, string) {
+// createCollisionFree writes data to dir under name, appending -1, -2… before
+// the extension until an unused name is found. Creation is O_CREATE|O_EXCL —
+// atomic at the filesystem level — so concurrent uploads of the same name can
+// never overwrite each other; the loser just moves to the next suffix.
+func createCollisionFree(dir, name string, data []byte) (string, error) {
 	ext := filepath.Ext(name)
 	stem := strings.TrimSuffix(name, ext)
 	candidate := name
 	for i := 1; ; i++ {
 		path := filepath.Join(dir, candidate)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return path, candidate
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+		if err != nil {
+			if os.IsExist(err) {
+				candidate = fmt.Sprintf("%s-%d%s", stem, i, ext)
+				continue
+			}
+			return "", err
 		}
-		candidate = fmt.Sprintf("%s-%d%s", stem, i, ext)
+		if _, err := f.Write(data); err != nil {
+			f.Close()
+			os.Remove(path)
+			return "", err
+		}
+		if err := f.Close(); err != nil {
+			os.Remove(path)
+			return "", err
+		}
+		return candidate, nil
 	}
 }

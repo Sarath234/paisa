@@ -4,12 +4,14 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -102,6 +104,48 @@ func TestUploadSanitizesAndSuffixesCollisions(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, r2.File)); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestUploadConcurrentSameNameNoOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	h := statementUploadHandler(dir, func() {})
+
+	const n = 20
+	var wg sync.WaitGroup
+	codes := make([]int, n)
+	names := make([]string, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			rr := httptest.NewRecorder()
+			h(rr, uploadReq(t, "same.pdf", []byte(fmt.Sprintf("%%PDF payload %d", i))))
+			codes[i] = rr.Code
+			var resp struct{ File string }
+			json.Unmarshal(rr.Body.Bytes(), &resp)
+			names[i] = resp.File
+		}(i)
+	}
+	wg.Wait()
+
+	seen := map[string]bool{}
+	for i := 0; i < n; i++ {
+		if codes[i] != 200 {
+			t.Fatalf("upload %d: code %d", i, codes[i])
+		}
+		if seen[names[i]] {
+			t.Fatalf("duplicate stored name returned: %q", names[i])
+		}
+		seen[names[i]] = true
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != n {
+		t.Fatalf("expected %d files, found %d — collision overwrote uploads", n, len(entries))
 	}
 }
 
