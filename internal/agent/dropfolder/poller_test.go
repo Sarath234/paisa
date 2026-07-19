@@ -140,14 +140,16 @@ func TestKickTriggersProcessingWithoutTicker(t *testing.T) {
 	p := New(dir, []AccountMatch{{Pattern: "*.pdf", LedgerAccount: "A:B"}},
 		func(s Statement) error { handled <- s.Filename; return nil },
 		func(string) {})
-	p.Interval = time.Hour // ticker must not be the trigger
-	p.MinAge = 0
+	p.Interval = time.Hour            // ticker must not be the trigger
+	p.MinAge = 200 * time.Millisecond // initial scan at t≈0 must skip the too-young file
 	go p.Start()
 
-	// Start's initial PollOnce sees an empty dir; now drop a file and kick.
+	// Even if Start's initial PollOnce sees this file, it is younger than
+	// MinAge and gets skipped — only the Kick below can trigger processing.
 	if err := os.WriteFile(filepath.Join(dir, "stmt.pdf"), []byte("%PDF"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	time.Sleep(300 * time.Millisecond) // let the file age past MinAge
 	p.Kick()
 	select {
 	case name := <-handled:
@@ -156,6 +158,20 @@ func TestKickTriggersProcessingWithoutTicker(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("kick did not trigger processing before the ticker")
+	}
+
+	// Wait for the background moveTo to settle so the leaked poller goroutine
+	// cannot race t.TempDir cleanup.
+	processed := filepath.Join(dir, "processed", "stmt.pdf")
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, err := os.Stat(processed); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("processed/stmt.pdf never appeared")
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
