@@ -99,6 +99,7 @@ func (p *Poller) PollOnce() {
 
 // MatchAccount returns the first AccountMatch whose glob pattern matches
 // name case-insensitively, or nil. Bad patterns are logged and skipped.
+// The returned pointer aliases matches — callers must not mutate through it.
 func MatchAccount(name string, matches []AccountMatch) *AccountMatch {
 	for i := range matches {
 		ok, err := filepath.Match(strings.ToLower(matches[i].Pattern), strings.ToLower(name))

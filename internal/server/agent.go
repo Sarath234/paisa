@@ -23,13 +23,13 @@ func ChatWithAgent(c *gin.Context) {
 	proxyToAgent(c, agentBaseURL+"/chat")
 }
 
-func proxyToAgent(c *gin.Context, url string) {
+func proxyToAgent(c *gin.Context, target string) {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
 		return
 	}
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	resp, err := http.Post(target, "application/json", bytes.NewReader(body))
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "paisa-agent not reachable: " + err.Error()})
 		return
