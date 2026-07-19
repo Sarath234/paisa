@@ -82,10 +82,19 @@
       fd.append("file", file);
       try {
         const res = await fetch("/api/agent/statement/upload", { method: "POST", body: fd });
-        const body = await res.json();
+        // Parse defensively: an error response (e.g. a 502/503 from a proxy in front of
+        // the agent) may not have a JSON body at all. Keep res.status available even
+        // when parsing fails, so the status-based banner logic below still fires.
+        let body: any = {};
+        try {
+          body = await res.json();
+        } catch {
+          // non-JSON body — fall through with body = {}
+        }
         if (!res.ok) {
-          update(id, { status: "error", error: body.error || `upload failed (${res.status})` });
-          if (res.status === 502 || res.status === 503) banner = body.error;
+          const msg = body.error || `upload failed (${res.status})`;
+          update(id, { status: "error", error: msg });
+          if (res.status === 502 || res.status === 503) banner = msg;
           continue;
         }
         update(id, { name: body.file, status: "queued", startedAt: Date.now() });
