@@ -176,3 +176,37 @@ func TestCompareCCPaymentCreditMatchesTransfer(t *testing.T) {
 		t.Fatalf("%+v", diff)
 	}
 }
+
+func ccTxn2(y, m, d int, desc string, debit, credit float64) statement.CCTransaction {
+	return ccTxn(date(y, m, d), desc, debit, credit)
+}
+
+func TestCompareSetsMatched(t *testing.T) {
+	res := statement.ParseResult{
+		Month: time.June, Year: 2026,
+		Transactions: []statement.Transaction{
+			{Date: date(2026, 6, 15), Description: "A", Debit: 100},
+			{Date: date(2026, 6, 16), Description: "B", Debit: 200},
+		},
+	}
+	ledger := []LedgerEntry{{Date: date(2026, 6, 15), Description: "a", Amount: -100}}
+	diff := Compare(res, ledger)
+	if diff.Matched != 1 {
+		t.Fatalf("matched: got %d want 1", diff.Matched)
+	}
+}
+
+func TestCompareCCSetsMatched(t *testing.T) {
+	res := statement.CCResult{
+		PeriodEnd: date(2026, 7, 10),
+		Transactions: []statement.CCTransaction{
+			ccTxn2(2026, 6, 15, "SWIGGY", 450.50, 0),
+			ccTxn2(2026, 6, 20, "UNKNOWN", 999.00, 0),
+		},
+	}
+	ledger := []LedgerEntry{{Date: date(2026, 6, 15), Description: "x", Amount: -450.50}}
+	diff := CompareCC(res, ledger)
+	if diff.Matched != 1 {
+		t.Fatalf("matched: got %d want 1", diff.Matched)
+	}
+}

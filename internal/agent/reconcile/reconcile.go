@@ -24,6 +24,10 @@ type Diff struct {
 	StatementClose float64                 `json:"statement_close"`
 	Missing        []statement.Transaction `json:"missing"` // in statement, not in ledger
 	Extra          []LedgerEntry           `json:"extra"`   // in ledger, not in statement
+	// Matched is how many statement transactions found a ledger partner —
+	// persisted so the upload-status endpoint can report a summary without
+	// recomputing. Additive: records written before this field read as 0.
+	Matched int `json:"matched"`
 }
 
 const amountEpsilon = 0.01
@@ -67,6 +71,7 @@ func Compare(result statement.ParseResult, ledger []LedgerEntry) Diff {
 		}
 	}
 
+	diff.Matched = len(result.Transactions) - len(diff.Missing)
 	return diff
 }
 
@@ -130,6 +135,7 @@ func CompareCC(res statement.CCResult, ledger []LedgerEntry) Diff {
 			diff.Extra = append(diff.Extra, le)
 		}
 	}
+	diff.Matched = len(res.Transactions) - len(diff.Missing)
 	return diff
 }
 
