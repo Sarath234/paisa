@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ananthakumaran/paisa/internal/agent/dropfolder"
+	"github.com/ananthakumaran/paisa/internal/agent/reconcile"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -121,5 +123,83 @@ func createCollisionFree(dir, name string, data []byte) (string, error) {
 			return "", err
 		}
 		return candidate, nil
+	}
+}
+
+type statusSummary struct {
+	Matched int    `json:"matched"`
+	Missing int    `json:"missing"`
+	Extra   int    `json:"extra"`
+	Period  string `json:"period"`
+}
+
+type statusResponse struct {
+	Status  string         `json:"status"`
+	Summary *statusSummary `json:"summary,omitempty"`
+}
+
+// statementStatusHandler reports where an uploaded statement currently is:
+// still queued in the drop dir, done (processed/), or failed (failed/) —
+// plus the newest reconcile summary for the file's account when done.
+func statementStatusHandler(dropDir string, matches []dropfolder.AccountMatch, journalDir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if dropDir == "" {
+			writeJSONError(w, http.StatusServiceUnavailable, "statements.drop_dir not configured")
+			return
+		}
+		name := r.URL.Query().Get("file")
+		if name == "" || name != filepath.Base(name) || strings.Contains(name, "..") {
+			writeJSONError(w, http.StatusBadRequest, "file must be a bare filename")
+			return
+		}
+		resp := statusResponse{Status: "unknown"}
+		switch {
+		case fileExists(filepath.Join(dropDir, name)):
+			resp.Status = "queued"
+		case fileExists(filepath.Join(dropDir, "processed", name)):
+			resp.Status = "done"
+			resp.Summary = summaryFor(name, matches, journalDir)
+		case fileExists(filepath.Join(dropDir, "failed", name)):
+			resp.Status = "failed"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// summaryFor finds the newest reconcile record for the account the filename
+// glob-matches. Nil when unmatched or no record — the UI degrades to
+// "processed done (details on Telegram / doctor page)".
+func summaryFor(name string, matches []dropfolder.AccountMatch, journalDir string) *statusSummary {
+	m := dropfolder.MatchAccount(name, matches)
+	if m == nil {
+		return nil
+	}
+	records, err := reconcile.ReadAll(journalDir)
+	if err != nil {
+		return nil
+	}
+	var newest *reconcile.Record
+	for i := range records {
+		if records[i].Diff.Account != m.LedgerAccount {
+			continue
+		}
+		if newest == nil || records[i].GeneratedAt.After(newest.GeneratedAt) {
+			newest = &records[i]
+		}
+	}
+	if newest == nil {
+		return nil
+	}
+	return &statusSummary{
+		Matched: newest.Diff.Matched,
+		Missing: len(newest.Diff.Missing),
+		Extra:   len(newest.Diff.Extra),
+		Period:  newest.Period,
 	}
 }

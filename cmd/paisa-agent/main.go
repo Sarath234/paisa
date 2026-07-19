@@ -134,6 +134,7 @@ func main() {
 	}
 
 	var dropPoller *dropfolder.Poller
+	var statementMatches []dropfolder.AccountMatch
 
 	if cfg.Statements != nil && cfg.Statements.DropDir == "" {
 		log.Errorf("statements: drop_dir is empty — skipping drop-folder poller")
@@ -147,6 +148,7 @@ func main() {
 				Password:      a.PDFPassword,
 			})
 		}
+		statementMatches = matches
 		dropPoller = dropfolder.New(cfg.Statements.DropDir, matches,
 			func(s dropfolder.Statement) error {
 				if s.Kind == "credit_card" {
@@ -231,7 +233,7 @@ func main() {
 		},
 	)
 
-	go serveHTTP(cfg, smsCap, qaCap.Answerer, dropPoller)
+	go serveHTTP(cfg, smsCap, qaCap.Answerer, dropPoller, statementMatches)
 
 	log.Infof("paisa-agent started — polling Telegram (chat_id=%d)", cfg.Telegram.ChatID)
 
@@ -548,7 +550,7 @@ func handleStatement(
 	return nil
 }
 
-func serveHTTP(cfg *config.Config, smsCap *sms.Capability, answerer *qa.Answerer, dropPoller *dropfolder.Poller) {
+func serveHTTP(cfg *config.Config, smsCap *sms.Capability, answerer *qa.Answerer, dropPoller *dropfolder.Poller, statementMatches []dropfolder.AccountMatch) {
 	mux := http.NewServeMux()
 
 	dropDir, kickFn := "", func() {}
@@ -556,6 +558,7 @@ func serveHTTP(cfg *config.Config, smsCap *sms.Capability, answerer *qa.Answerer
 		dropDir, kickFn = cfg.Statements.DropDir, dropPoller.Kick
 	}
 	mux.HandleFunc("/statement/upload", statementUploadHandler(dropDir, kickFn))
+	mux.HandleFunc("/statement/status", statementStatusHandler(dropDir, statementMatches, cfg.Paisa.JournalDir))
 
 	mux.HandleFunc("/parse", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

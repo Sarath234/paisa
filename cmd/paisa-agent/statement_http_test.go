@@ -14,6 +14,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ananthakumaran/paisa/internal/agent/dropfolder"
+	"github.com/ananthakumaran/paisa/internal/agent/reconcile"
+	"github.com/ananthakumaran/paisa/internal/agent/statement"
 )
 
 func uploadReq(t *testing.T, filename string, content []byte) *http.Request {
@@ -163,6 +167,100 @@ func TestUploadMethodNotAllowed(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h(rr, httptest.NewRequest("GET", "/statement/upload", nil))
 	if rr.Code != 405 {
+		t.Fatalf("code %d", rr.Code)
+	}
+}
+
+func seedReconcileRecord(t *testing.T, journalDir, account, period string, matched, missing, extra int) {
+	t.Helper()
+	diff := reconcile.Diff{Account: account, Matched: matched}
+	for i := 0; i < missing; i++ {
+		diff.Missing = append(diff.Missing, statement.Transaction{Description: fmt.Sprintf("m%d", i)})
+	}
+	for i := 0; i < extra; i++ {
+		diff.Extra = append(diff.Extra, reconcile.LedgerEntry{Description: fmt.Sprintf("e%d", i)})
+	}
+	if err := reconcile.Write(journalDir, reconcile.Record{
+		Period: period, GeneratedAt: time.Now(), Diff: diff,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func statusReq(file string) *http.Request {
+	return httptest.NewRequest("GET", "/statement/status?file="+file, nil)
+}
+
+func TestStatusQueuedDoneFailedUnknown(t *testing.T) {
+	drop := t.TempDir()
+	journal := t.TempDir()
+	matches := []dropfolder.AccountMatch{{Pattern: "*6009*", LedgerAccount: "Liabilities:CreditCard:ICIC6009", Kind: "credit_card"}}
+	h := statementStatusHandler(drop, matches, journal)
+
+	os.WriteFile(filepath.Join(drop, "q-6009.pdf"), []byte("%PDF"), 0644)
+	os.MkdirAll(filepath.Join(drop, "processed"), 0755)
+	os.WriteFile(filepath.Join(drop, "processed", "d-6009.pdf"), []byte("%PDF"), 0644)
+	os.MkdirAll(filepath.Join(drop, "failed"), 0755)
+	os.WriteFile(filepath.Join(drop, "failed", "f-6009.pdf"), []byte("%PDF"), 0644)
+	seedReconcileRecord(t, journal, "Liabilities:CreditCard:ICIC6009", "2026-07", 34, 2, 1)
+
+	cases := map[string]string{
+		"q-6009.pdf": "queued", "d-6009.pdf": "done", "f-6009.pdf": "failed", "nope.pdf": "unknown",
+	}
+	for file, want := range cases {
+		rr := httptest.NewRecorder()
+		h(rr, statusReq(file))
+		var resp struct {
+			Status  string `json:"status"`
+			Summary *struct {
+				Matched, Missing, Extra int
+				Period                  string
+			} `json:"summary"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("%s: %v (%s)", file, err, rr.Body.String())
+		}
+		if resp.Status != want {
+			t.Errorf("%s: status %q want %q", file, resp.Status, want)
+		}
+		if want == "done" {
+			if resp.Summary == nil || resp.Summary.Matched != 34 || resp.Summary.Missing != 2 || resp.Summary.Extra != 1 || resp.Summary.Period != "2026-07" {
+				t.Errorf("done summary: %+v", resp.Summary)
+			}
+		} else if resp.Summary != nil {
+			t.Errorf("%s: unexpected summary", file)
+		}
+	}
+}
+
+func TestStatusDoneWithoutRecordOmitsSummary(t *testing.T) {
+	drop := t.TempDir()
+	os.MkdirAll(filepath.Join(drop, "processed"), 0755)
+	os.WriteFile(filepath.Join(drop, "processed", "d-6009.pdf"), []byte("%PDF"), 0644)
+	h := statementStatusHandler(drop, []dropfolder.AccountMatch{{Pattern: "*6009*", LedgerAccount: "L:CC:X"}}, t.TempDir())
+	rr := httptest.NewRecorder()
+	h(rr, statusReq("d-6009.pdf"))
+	if !strings.Contains(rr.Body.String(), `"done"`) || strings.Contains(rr.Body.String(), "summary") {
+		t.Fatalf("body: %s", rr.Body.String())
+	}
+}
+
+func TestStatusRejectsPaths(t *testing.T) {
+	h := statementStatusHandler(t.TempDir(), nil, t.TempDir())
+	for _, bad := range []string{"", "a/b.pdf", "..%2Fx.pdf"} {
+		rr := httptest.NewRecorder()
+		h(rr, statusReq(bad))
+		if rr.Code != 400 {
+			t.Errorf("%q: code %d", bad, rr.Code)
+		}
+	}
+}
+
+func TestStatusUnconfigured503(t *testing.T) {
+	h := statementStatusHandler("", nil, t.TempDir())
+	rr := httptest.NewRecorder()
+	h(rr, statusReq("x.pdf"))
+	if rr.Code != 503 {
 		t.Fatalf("code %d", rr.Code)
 	}
 }
