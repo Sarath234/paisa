@@ -106,6 +106,8 @@ statements:
 
 Matched PDFs are parsed and reconciled exactly like Gmail statements. Processed files move to `<drop_dir>/processed/`; unmatched or unparseable files move to `<drop_dir>/failed/` with a Telegram notification.
 
+You can also upload statements from the web UI: the navbar's upload button opens a drop-modal that sends the PDF into the same drop folder (results appear in the modal, on Telegram, and on the doctor page). Requires paisa-agent running with `statements.drop_dir` configured.
+
 **Credit card statement truth:** For `kind: credit_card` accounts, bill facts (statement period, due date, total/min due, paid date/amount) are tracked in a small truth store instead of being re-derived each time. Forwarded statement and payment notice SMSes update these facts at *SMS authority*; a dropped statement PDF overrides them at *PDF authority* (higher confidence — SMS text is short and lossy). On drop, reconciliation compares the statement's transaction lines against the ledger for that cycle and sends inline-button cards: approve-to-add for transactions missing from the ledger, confirm-to-remove for ledger entries that look like duplicates not present in the statement (only offered when the entry can be uniquely located in the journal, and the journal file is backed up before any edit). This state — one record per card — lives in `bill-truth.json` in `paisa.journal_dir`.
 
 ## Status
