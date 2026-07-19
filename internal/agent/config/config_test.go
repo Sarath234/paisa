@@ -168,6 +168,33 @@ func TestLoadMonitorsDefaultDigestHour(t *testing.T) {
 	}
 }
 
+func TestLoadStatementsCreditCardFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "paisa-agent.yaml")
+	yaml := "paisa:\n  url: http://x\n  journal_dir: /tmp/j\nstatements:\n  drop_dir: /tmp/drop\n  accounts:\n    - filename_match: \"*6009*\"\n      ledger_account: \"Liabilities:CreditCard:ICIC6009\"\n      kind: credit_card\n      pdf_password: \"pw123\"\n"
+	if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := cfg.Statements.Accounts[0]
+	if a.Kind != "credit_card" || a.PDFPassword != "pw123" {
+		t.Fatalf("%+v", a)
+	}
+}
+
+func TestLoadStatementsRejectsBadKind(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "paisa-agent.yaml")
+	yaml := "paisa:\n  url: http://x\n  journal_dir: /tmp/j\nstatements:\n  drop_dir: /tmp/drop\n  accounts:\n    - filename_match: \"*x*\"\n      ledger_account: \"A:B\"\n      kind: mortgage\n"
+	os.WriteFile(path, []byte(yaml), 0644)
+	if _, err := config.Load(path); err == nil {
+		t.Fatal("want error for kind=mortgage")
+	}
+}
+
 func TestLoadMonitorsDigestHourValidation(t *testing.T) {
 	cases := []struct {
 		hour    string
@@ -191,6 +218,33 @@ func TestLoadMonitorsDigestHourValidation(t *testing.T) {
 		}
 		if !c.wantErr && err != nil {
 			t.Errorf("digest_hour=%s: unexpected error: %v", c.hour, err)
+		}
+	}
+}
+
+func TestLoadMonitorsTruthGapDaysValidation(t *testing.T) {
+	cases := []struct {
+		days    string
+		wantErr bool
+	}{
+		{"-1", true},
+		{"0", false}, // 0 means unset, defaults to 3
+		{"1", false},
+		{"3", false},
+	}
+	for _, c := range cases {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "paisa-agent.yaml")
+		yaml := "paisa:\n  url: http://x\n  journal_dir: /tmp/j\nmonitors:\n  credit_cards:\n    truth_gap_days: " + c.days + "\n"
+		if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := config.Load(path)
+		if c.wantErr && err == nil {
+			t.Errorf("truth_gap_days=%s: want error, got nil", c.days)
+		}
+		if !c.wantErr && err != nil {
+			t.Errorf("truth_gap_days=%s: unexpected error: %v", c.days, err)
 		}
 	}
 }

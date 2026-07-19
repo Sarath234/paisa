@@ -2,11 +2,11 @@ package monitor
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ananthakumaran/paisa/internal/agent/billtruth"
 	"github.com/ananthakumaran/paisa/internal/agent/paisaclient"
 )
 
@@ -58,8 +58,13 @@ func fetcherWithDetail(card paisaclient.CreditCardSummary) *fakeFetcher {
 	}
 }
 
+// day builds a local-midnight time.Time. billtruth.Store.Apply normalizes
+// every incoming bill date to local-midnight (see billtruth/apply.go's
+// localMidnight), and production Now() (time.Now()) is genuinely local —
+// so tests build "today" overrides and bill dates the same way to stay
+// self-consistent regardless of the host's timezone.
 func day(s string) time.Time {
-	t, err := time.Parse("2006-01-02", s)
+	t, err := time.ParseInLocation("2006-01-02", s, time.Local)
 	if err != nil {
 		panic(err)
 	}
@@ -79,13 +84,129 @@ func cardWithBill(bill paisaclient.CreditCardBill) paisaclient.CreditCardSummary
 	}
 }
 
-func TestCCDueEmitsSmallestApplicableOffset(t *testing.T) {
-	bill := paisaclient.CreditCardBill{
-		StatementEndDate: day("2026-07-15"),
-		DueDate:          day("2026-07-28"),
-		ClosingBalance:   23450.5,
+// truthStore builds an in-memory billtruth.Store (backed by a temp dir)
+// seeded with the given bills at AuthoritySMS, mirroring what a real
+// statement/payment SMS would produce. cc_due tests read through BillSource,
+// not the fetcher, so bill facts replace API fixtures.
+func truthStore(t *testing.T, bills ...billtruth.Bill) *billtruth.Store {
+	t.Helper()
+	s, err := billtruth.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
 	}
-	m := NewCCDue(&fakeFetcher{cards: []paisaclient.CreditCardSummary{cardWithBill(bill)}}, []int{7, 3, 1, 0}, 8)
+	for _, b := range bills {
+		end := b.PeriodEnd
+		due := b.DueDate
+		total := b.TotalDue
+		f := billtruth.Facts{Account: b.Account, PeriodEnd: &end, DueDate: &due, TotalDue: &total, Source: billtruth.AuthoritySMS}
+		if b.PaidDate != nil {
+			f.PaidDate = b.PaidDate
+		}
+		if _, err := s.Apply(f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return s
+}
+
+func TestCCDueFromTruthStore(t *testing.T) {
+	s := truthStore(t, billtruth.Bill{
+		Account:   "Liabilities:CreditCard:ICIC6009",
+		PeriodEnd: day("2026-07-10"),
+		DueDate:   day("2026-07-30"),
+		TotalDue:  23450.50,
+	})
+	m := NewCCDue(s, []int{3, 1, 0}, 8)
+	m.Now = func() time.Time { return day("2026-07-27").Add(8 * time.Hour) }
+	insights, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(insights) != 1 || insights[0].Key != "cc-due/Liabilities:CreditCard:ICIC6009/2026-07-30/d-3" {
+		t.Fatalf("%+v", insights)
+	}
+	if !strings.Contains(insights[0].Title, "₹23450.50") {
+		t.Errorf("amount from TotalDue: %q", insights[0].Title)
+	}
+}
+
+// TestCCDueBucketsCorrectlyWithUTCParsedDueDate guards the timezone
+// normalization fix in billtruth.Apply: SMS/PDF dates parse as UTC
+// midnight (e.g. notices.parseNoticeDate), regardless of host timezone.
+// Without normalizing them to local-midnight on the way into the store,
+// comparing against DateOnly(time.Now()) (a local midnight) can be off by
+// a day, shifting which reminder offset fires. Apply a due date built the
+// same way a real UTC-midnight parse would, and confirm the day-math
+// still buckets to the right offset.
+func TestCCDueBucketsCorrectlyWithUTCParsedDueDate(t *testing.T) {
+	s, err := billtruth.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	periodEnd := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
+	due := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
+	total := 23450.50
+	if _, err := s.Apply(billtruth.Facts{
+		Account: "Liabilities:CreditCard:ICIC6009", PeriodEnd: &periodEnd, DueDate: &due, TotalDue: &total,
+		Source: billtruth.AuthoritySMS,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	m := NewCCDue(s, []int{3, 1, 0}, 8)
+	m.Now = func() time.Time { return day("2026-07-27").Add(8 * time.Hour) }
+	insights, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(insights) != 1 || insights[0].Key != "cc-due/Liabilities:CreditCard:ICIC6009/2026-07-30/d-3" {
+		t.Fatalf("%+v", insights)
+	}
+}
+
+func TestCCDuePaidBillSilent(t *testing.T) {
+	paid := day("2026-07-25")
+	s := truthStore(t, billtruth.Bill{
+		Account: "Liabilities:CreditCard:ICIC6009", PeriodEnd: day("2026-07-10"),
+		DueDate: day("2026-07-30"), TotalDue: 23450.50, PaidDate: &paid,
+	})
+	m := NewCCDue(s, []int{3, 1, 0}, 8)
+	m.Now = func() time.Time { return day("2026-07-28").Add(8 * time.Hour) }
+	insights, _ := m.Check(context.Background())
+	if len(insights) != 0 {
+		t.Fatalf("paid bill must be silent: %+v", insights)
+	}
+}
+
+func TestCCDueCorrectedDueDateRefires(t *testing.T) {
+	// key embeds due date: correction produces a new key
+	s := truthStore(t, billtruth.Bill{
+		Account: "Liabilities:CreditCard:ICIC6009", PeriodEnd: day("2026-07-10"),
+		DueDate: day("2026-07-30"), TotalDue: 23450.50,
+	})
+	m := NewCCDue(s, []int{3, 1, 0}, 8)
+	m.Now = func() time.Time { return day("2026-07-29").Add(8 * time.Hour) }
+	first, _ := m.Check(context.Background())
+	// PDF corrects due date to 31st
+	end, due2 := day("2026-07-10"), day("2026-07-31")
+	s.Apply(billtruth.Facts{Account: "Liabilities:CreditCard:ICIC6009", PeriodEnd: &end, DueDate: &due2, Source: billtruth.AuthorityPDF})
+	second, _ := m.Check(context.Background())
+	if len(first) != 1 || len(second) != 1 || first[0].Key == second[0].Key {
+		t.Fatalf("corrected due date must change key: %v vs %v", first, second)
+	}
+}
+
+// TestCCDueEmitsSmallestApplicableOffset ports the original fetcher-backed
+// scenario: offset selection, self-healing across a missed run (the d-3
+// window is skipped and the monitor still fires with the accurate day
+// count), and escalation to overdue once the due date has passed.
+func TestCCDueEmitsSmallestApplicableOffset(t *testing.T) {
+	s := truthStore(t, billtruth.Bill{
+		Account:   "Liabilities:CreditCard:Axis",
+		PeriodEnd: day("2026-07-15"),
+		DueDate:   day("2026-07-28"),
+		TotalDue:  23450.5,
+	})
+	m := NewCCDue(s, []int{7, 3, 1, 0}, 8)
 
 	cases := []struct {
 		today   string
@@ -113,119 +234,47 @@ func TestCCDueEmitsSmallestApplicableOffset(t *testing.T) {
 		if !strings.Contains(in.Title, c.wantIn) || !strings.Contains(in.Title, "₹23450.50") || !strings.Contains(in.Title, "Axis") {
 			t.Errorf("%s: title %q", c.today, in.Title)
 		}
-		if strings.Contains(in.Title, "99999") {
-			t.Errorf("%s: title leaked card.Balance instead of bill.ClosingBalance: %q", c.today, in.Title)
-		}
 		if in.Urgency != Immediate {
 			t.Errorf("%s: want Immediate", c.today)
 		}
 	}
 }
 
-func TestCCDueQuietWhenFarOrPaid(t *testing.T) {
-	paid := day("2026-07-20")
-	cases := []struct {
-		name string
-		bill paisaclient.CreditCardBill
-	}{
-		{"far away", paisaclient.CreditCardBill{DueDate: day("2026-08-20"), ClosingBalance: 100}},
-		{"already paid", paisaclient.CreditCardBill{DueDate: day("2026-07-28"), PaidDate: &paid, ClosingBalance: 100}},
-	}
-	for _, c := range cases {
-		m := NewCCDue(&fakeFetcher{cards: []paisaclient.CreditCardSummary{cardWithBill(c.bill)}}, []int{3, 1, 0}, 8)
-		m.Now = func() time.Time { return day("2026-07-26") }
-		insights, err := m.Check(context.Background())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(insights) != 0 {
-			t.Errorf("%s: want quiet, got %+v", c.name, insights)
-		}
-	}
-}
-
-func TestCCDueUsesLatestUnpaidBill(t *testing.T) {
-	paid := day("2026-06-25")
-	card := paisaclient.CreditCardSummary{
-		Account: "Liabilities:CreditCard:Axis",
-		Bills: []paisaclient.CreditCardBill{
-			{DueDate: day("2026-06-28"), PaidDate: &paid, ClosingBalance: 900},
-			{DueDate: day("2026-07-28"), ClosingBalance: 23450.5},
-		},
-	}
-	m := NewCCDue(&fakeFetcher{cards: []paisaclient.CreditCardSummary{card}}, []int{3, 1, 0}, 8)
-	m.Now = func() time.Time { return day("2026-07-27") }
+// TestCCDueQuietWhenDueFarAway ports the "far away" half of the original
+// fakeFetcher TestCCDueQuietWhenFarOrPaid; the "already paid" half is now
+// TestCCDuePaidBillSilent.
+func TestCCDueQuietWhenDueFarAway(t *testing.T) {
+	s := truthStore(t, billtruth.Bill{
+		Account: "Liabilities:CreditCard:Axis", PeriodEnd: day("2026-07-15"),
+		DueDate: day("2026-08-20"), TotalDue: 100,
+	})
+	m := NewCCDue(s, []int{3, 1, 0}, 8)
+	m.Now = func() time.Time { return day("2026-07-26") }
 	insights, err := m.Check(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(insights) != 1 || !strings.Contains(insights[0].Key, "2026-07-28/d-1") {
-		t.Fatalf("insights: %+v", insights)
-	}
-	if !strings.Contains(insights[0].Title, "tomorrow") {
-		t.Errorf("d-1 title should say tomorrow: %q", insights[0].Title)
+	if len(insights) != 0 {
+		t.Errorf("due far in the future: want quiet, got %+v", insights)
 	}
 }
 
-// TestCCDueRemindsClosedBillWhileOpenCycleExists reproduces the production
-// bug: an actively-used card always carries an open current cycle (future
-// StatementEndDate/DueDate, PaidDate nil) alongside the closed statement
-// that's actually due. cc_due must key off the closed bill, not whichever
-// bill happens to have the latest due date (the open cycle always does).
-func TestCCDueRemindsClosedBillWhileOpenCycleExists(t *testing.T) {
-	card := paisaclient.CreditCardSummary{
-		Account: "Liabilities:CreditCard:Axis",
-		Bills: []paisaclient.CreditCardBill{
-			{ // closed, unpaid, actually due
-				StatementEndDate: day("2026-06-15"),
-				DueDate:          day("2026-06-28"),
-				ClosingBalance:   5000,
-			},
-			{ // open current cycle — must not be mistaken for the due bill
-				StatementEndDate: day("2026-07-15"),
-				DueDate:          day("2026-07-28"),
-				ClosingBalance:   0,
-			},
+// TestCCDueEmitsForMultipleUnpaidBills ports the original
+// TestCCDueEmitsForMultipleUnpaidClosedBills: a missed payment from a prior
+// cycle plus the current closed statement are both due money and must each
+// get their own reminder, keyed by their own due date.
+func TestCCDueEmitsForMultipleUnpaidBills(t *testing.T) {
+	s := truthStore(t,
+		billtruth.Bill{ // missed payment from a prior cycle
+			Account: "Liabilities:CreditCard:Axis", PeriodEnd: day("2026-05-15"),
+			DueDate: day("2026-05-28"), TotalDue: 900,
 		},
-	}
-	m := NewCCDue(&fakeFetcher{cards: []paisaclient.CreditCardSummary{card}}, []int{3, 1, 0}, 8)
-	m.Now = func() time.Time { return day("2026-06-26").Add(8 * time.Hour) } // 2 days before the closed bill's due date
-
-	insights, err := m.Check(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(insights) != 1 {
-		t.Fatalf("insights: %+v", insights)
-	}
-	if !strings.Contains(insights[0].Key, "2026-06-28/d-3") {
-		t.Errorf("key: %q, want the closed bill's due date", insights[0].Key)
-	}
-	if !strings.Contains(insights[0].Title, "₹5000.00") {
-		t.Errorf("title: %q, want closed bill's ClosingBalance", insights[0].Title)
-	}
-}
-
-// TestCCDueEmitsForMultipleUnpaidClosedBills covers a missed payment (an
-// older closed cycle still unpaid) plus the current closed statement: both
-// are due money and must each get their own reminder.
-func TestCCDueEmitsForMultipleUnpaidClosedBills(t *testing.T) {
-	card := paisaclient.CreditCardSummary{
-		Account: "Liabilities:CreditCard:Axis",
-		Bills: []paisaclient.CreditCardBill{
-			{ // missed payment from a prior cycle
-				StatementEndDate: day("2026-05-15"),
-				DueDate:          day("2026-05-28"),
-				ClosingBalance:   900,
-			},
-			{ // current closed statement
-				StatementEndDate: day("2026-06-15"),
-				DueDate:          day("2026-06-28"),
-				ClosingBalance:   23450.5,
-			},
+		billtruth.Bill{ // current closed statement
+			Account: "Liabilities:CreditCard:Axis", PeriodEnd: day("2026-06-15"),
+			DueDate: day("2026-06-28"), TotalDue: 23450.5,
 		},
-	}
-	m := NewCCDue(&fakeFetcher{cards: []paisaclient.CreditCardSummary{card}}, []int{3, 1, 0}, 8)
+	)
+	m := NewCCDue(s, []int{3, 1, 0}, 8)
 	m.Now = func() time.Time { return day("2026-06-26").Add(8 * time.Hour) }
 
 	insights, err := m.Check(context.Background())
@@ -246,14 +295,5 @@ func TestCCDueEmitsForMultipleUnpaidClosedBills(t *testing.T) {
 	}
 	if !gotOverdue || !gotD3 {
 		t.Fatalf("expected both overdue and d-3 insights: %+v", insights)
-	}
-}
-
-func TestCCDueFetchErrorPropagates(t *testing.T) {
-	m := NewCCDue(&fakeFetcher{err: errors.New("paisa unreachable")}, []int{3, 1, 0}, 8)
-	m.Now = func() time.Time { return day("2026-07-26") }
-	_, err := m.Check(context.Background())
-	if err == nil {
-		t.Fatal("want error, got nil")
 	}
 }

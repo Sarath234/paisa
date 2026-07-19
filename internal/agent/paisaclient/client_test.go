@@ -3,6 +3,7 @@ package paisaclient
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -220,5 +221,42 @@ func TestCreditCardNotFound(t *testing.T) {
 	}
 	if card != nil {
 		t.Fatalf("want nil card, got %+v", card)
+	}
+}
+
+func TestSyncJournal(t *testing.T) {
+	var gotMethod, gotPath string
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		var err error
+		gotBody, err = io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		w.Write([]byte(`{"success": true}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	if err := c.SyncJournal(); err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != "POST" || gotPath != "/api/sync" {
+		t.Fatalf("%s %s", gotMethod, gotPath)
+	}
+	if string(gotBody) != `{"journal":true}` {
+		t.Fatalf("want body {\"journal\":true}, got %s", gotBody)
+	}
+}
+
+func TestSyncJournalError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	err := c.SyncJournal()
+	if err == nil || !strings.Contains(err.Error(), "status 503") {
+		t.Fatalf("want status-503 error, got %v", err)
 	}
 }

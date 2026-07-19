@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -173,4 +174,17 @@ func (c *Client) CreditCard(account string) (*CreditCardSummary, error) {
 		return nil, nil
 	}
 	return r.CreditCard, nil
+}
+
+// SyncJournal asks paisa to re-read the journal (POST /api/sync).
+func (c *Client) SyncJournal() error {
+	resp, err := c.httpClient.Post(c.baseURL+"/api/sync", "application/json", strings.NewReader(`{"journal":true}`))
+	if err != nil {
+		return fmt.Errorf("paisa /api/sync: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("paisa /api/sync: status %d", resp.StatusCode)
+	}
+	return nil
 }

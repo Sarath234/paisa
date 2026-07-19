@@ -145,6 +145,18 @@ func (b *Bot) SendRuleConfirmationFinal(text string) (int, error) {
 	}})
 }
 
+// SendConfirm sends a duplicate-removal confirmation card with
+// ✅ Remove / ❌ Keep buttons. Returns the sent message's ID for later
+// editing; the callback handler identifies the pending removal by that
+// message ID (same convention as SendDraft/SendRuleConfirmation), so the
+// callback data itself stays static.
+func (b *Bot) SendConfirm(text string) (int, error) {
+	return b.sendWithKeyboard(text, [][]inlineButton{{
+		{Text: "✅ Remove", CallbackData: "ccdel"},
+		{Text: "❌ Keep", CallbackData: "cckeep"},
+	}})
+}
+
 func (b *Bot) sendWithKeyboard(text string, buttons [][]inlineButton) (int, error) {
 	result, err := b.post("sendMessage", map[string]any{
 		"chat_id":      b.ChatID,
