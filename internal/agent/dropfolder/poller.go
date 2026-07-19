@@ -38,6 +38,7 @@ type Poller struct {
 	matches []AccountMatch
 	handler func(Statement) error
 	notify  func(string)
+	kick    chan struct{}
 }
 
 func New(dir string, matches []AccountMatch, handler func(Statement) error, notify func(string)) *Poller {
@@ -49,6 +50,7 @@ func New(dir string, matches []AccountMatch, handler func(Statement) error, noti
 		matches:  matches,
 		handler:  handler,
 		notify:   notify,
+		kick:     make(chan struct{}, 1),
 	}
 }
 
@@ -57,8 +59,22 @@ func (p *Poller) Start() {
 	p.PollOnce()
 	ticker := time.NewTicker(p.Interval)
 	defer ticker.Stop()
-	for range ticker.C {
-		p.PollOnce()
+	for {
+		select {
+		case <-ticker.C:
+			p.PollOnce()
+		case <-p.kick:
+			p.PollOnce()
+		}
+	}
+}
+
+// Kick asks the poll loop to scan now instead of waiting for the ticker.
+// Non-blocking; concurrent kicks coalesce into one scan.
+func (p *Poller) Kick() {
+	select {
+	case p.kick <- struct{}{}:
+	default:
 	}
 }
 
@@ -81,21 +97,26 @@ func (p *Poller) PollOnce() {
 	}
 }
 
-func (p *Poller) process(name string) {
-	path := filepath.Join(p.dir, name)
-
-	var matched *AccountMatch
-	for _, m := range p.matches {
-		ok, err := filepath.Match(strings.ToLower(m.Pattern), strings.ToLower(name))
+// MatchAccount returns the first AccountMatch whose glob pattern matches
+// name case-insensitively, or nil. Bad patterns are logged and skipped.
+func MatchAccount(name string, matches []AccountMatch) *AccountMatch {
+	for i := range matches {
+		ok, err := filepath.Match(strings.ToLower(matches[i].Pattern), strings.ToLower(name))
 		if err != nil {
-			log.Warnf("dropfolder: bad pattern %q: %v", m.Pattern, err)
+			log.Warnf("dropfolder: bad pattern %q: %v", matches[i].Pattern, err)
 			continue
 		}
 		if ok {
-			matched = &m
-			break
+			return &matches[i]
 		}
 	}
+	return nil
+}
+
+func (p *Poller) process(name string) {
+	path := filepath.Join(p.dir, name)
+
+	matched := MatchAccount(name, p.matches)
 	if matched == nil {
 		p.notify(fmt.Sprintf("❌ Statement file %q matches no configured account — moved to failed/", name))
 		p.moveTo(name, "failed")
@@ -103,6 +124,9 @@ func (p *Poller) process(name string) {
 	}
 
 	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return // already processed by a concurrent scan or removed; not an error
+	}
 	if err != nil {
 		p.notify(fmt.Sprintf("❌ Could not read statement file %q: %v — moved to failed/", name, err))
 		p.moveTo(name, "failed")

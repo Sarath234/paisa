@@ -133,3 +133,59 @@ func TestPollOnceDispositions(t *testing.T) {
 		}
 	})
 }
+
+func TestKickTriggersProcessingWithoutTicker(t *testing.T) {
+	dir := t.TempDir()
+	handled := make(chan string, 1)
+	p := New(dir, []AccountMatch{{Pattern: "*.pdf", LedgerAccount: "A:B"}},
+		func(s Statement) error { handled <- s.Filename; return nil },
+		func(string) {})
+	p.Interval = time.Hour // ticker must not be the trigger
+	p.MinAge = 0
+	go p.Start()
+
+	// Start's initial PollOnce sees an empty dir; now drop a file and kick.
+	if err := os.WriteFile(filepath.Join(dir, "stmt.pdf"), []byte("%PDF"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	p.Kick()
+	select {
+	case name := <-handled:
+		if name != "stmt.pdf" {
+			t.Fatalf("handled %q", name)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("kick did not trigger processing before the ticker")
+	}
+}
+
+func TestProcessVanishedFileIsSilent(t *testing.T) {
+	dir := t.TempDir()
+	var notes []string
+	p := New(dir, []AccountMatch{{Pattern: "*.pdf", LedgerAccount: "A:B"}},
+		func(Statement) error { return nil },
+		func(msg string) { notes = append(notes, msg) })
+	p.process("never-existed.pdf")
+	if len(notes) != 0 {
+		t.Fatalf("vanished file must not notify: %q", notes)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "failed")); !os.IsNotExist(err) {
+		t.Fatal("vanished file must not create failed/")
+	}
+}
+
+func TestMatchAccount(t *testing.T) {
+	matches := []AccountMatch{
+		{Pattern: "*6009*", LedgerAccount: "L:CC:ICIC6009"},
+		{Pattern: "*.pdf", LedgerAccount: "A:Fallback"},
+	}
+	if m := MatchAccount("stmt-6009-jul.pdf", matches); m == nil || m.LedgerAccount != "L:CC:ICIC6009" {
+		t.Fatalf("got %+v", m)
+	}
+	if m := MatchAccount("other.pdf", matches); m == nil || m.LedgerAccount != "A:Fallback" {
+		t.Fatalf("got %+v", m)
+	}
+	if m := MatchAccount("notes.txt", matches); m != nil {
+		t.Fatalf("txt must not match: %+v", m)
+	}
+}
