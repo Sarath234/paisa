@@ -41,6 +41,8 @@ A Go sidecar that connects Paisa to Telegram, Gmail, and a local LLM (via Ollama
 - `ollama.url` and `ollama.model` (e.g. `gemma3:4b`)
 - `gmail.*` (optional) — OAuth2 credentials for statement reconciliation (see setup below)
 
+All the sections below (Gmail, Monitors, Statement drop folder) are optional top-level blocks added to this **same `paisa-agent.yaml`** file, as siblings of `paisa:`/`telegram:`/`ollama:` above — not separate files.
+
 **Run:** `./paisa-agent --config /path/to/paisa-agent.yaml`
 
 ### Telegram setup
@@ -74,7 +76,7 @@ A Go sidecar that connects Paisa to Telegram, Gmail, and a local LLM (via Ollama
 
 ### Monitors (credit card guardian)
 
-Add a `monitors:` block to enable the scheduled checks. All fields are optional — an empty `monitors: {}` enables everything with the defaults shown:
+Add a `monitors:` top-level block to **`paisa-agent.yaml`** (the same file as `telegram:`/`paisa:` above) to enable the scheduled checks. All fields are optional — an empty `monitors: {}` enables everything with the defaults shown:
 
 ```yaml
 monitors:
@@ -86,11 +88,11 @@ monitors:
     truth_gap_days: 3         # nudge if no statement SMS/PDF arrives N days after the computed cycle close
 ```
 
-Credit cards themselves are configured in Paisa (`paisa.yaml` → `credit_cards:`); the monitors read them via the Paisa API. Monitor state (dedupe keys, digest queue) is stored as `monitor-state.json` in `paisa.journal_dir`.
+Credit cards themselves are configured separately, in **Paisa's own `paisa.yaml`** (not `paisa-agent.yaml`) under a top-level `credit_cards:` block — the monitors just read them via the Paisa API. Monitor state (dedupe keys, digest queue) is stored as `monitor-state.json` in `paisa.journal_dir`.
 
 ### Statement drop folder
 
-As an alternative to Gmail polling, drop statement PDFs into a watched folder:
+As an alternative to Gmail polling, add a `statements:` top-level block to **`paisa-agent.yaml`** to drop statement PDFs into a watched folder:
 
 ```yaml
 statements:
