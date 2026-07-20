@@ -3,6 +3,7 @@ package notices
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ananthakumaran/paisa/internal/agent/billtruth"
 	log "github.com/sirupsen/logrus"
@@ -25,6 +26,10 @@ type Capability struct {
 	store        applier
 	bot          TextSender
 	cardsByLast4 map[string]string // "6009" → ledger account
+	// Now returns the current time; substituted for a missing StatementDate
+	// (some banks' notices never state one explicitly — see extract.go).
+	// Defaults to time.Now; tests override for determinism.
+	Now func() time.Time
 }
 
 func NewCapability(store *billtruth.Store, bot TextSender, cardsByLast4 map[string]string) *Capability {
@@ -34,7 +39,7 @@ func NewCapability(store *billtruth.Store, bot TextSender, cardsByLast4 map[stri
 // NewCapabilityWithApplier is NewCapability generalized over the applier
 // seam, for tests that need to inject a persistence failure.
 func NewCapabilityWithApplier(store applier, bot TextSender, cardsByLast4 map[string]string) *Capability {
-	return &Capability{store: store, bot: bot, cardsByLast4: cardsByLast4}
+	return &Capability{store: store, bot: bot, cardsByLast4: cardsByLast4, Now: time.Now}
 }
 
 func (c *Capability) Name() string { return "notices" }
@@ -65,11 +70,16 @@ func (c *Capability) handleStatement(n *StatementNotice, exErr error) error {
 	if !ok {
 		return c.bot.SendText(fmt.Sprintf("⚠️ Statement notice for unknown card ••%s — add it to parser_rules/credit_cards.", n.Last4))
 	}
-	start := n.StatementDate.AddDate(0, -1, 1)
+	stmtDate := n.StatementDate
+	inferred := stmtDate.IsZero()
+	if inferred {
+		stmtDate = c.Now()
+	}
+	start := stmtDate.AddDate(0, -1, 1)
 	changed, err := c.store.Apply(billtruth.Facts{
 		Account:     account,
 		PeriodStart: &start,
-		PeriodEnd:   &n.StatementDate,
+		PeriodEnd:   &stmtDate,
 		DueDate:     &n.DueDate,
 		TotalDue:    &n.TotalDue,
 		MinDue:      &n.MinDue,
@@ -80,8 +90,12 @@ func (c *Capability) handleStatement(n *StatementNotice, exErr error) error {
 		return c.bot.SendText(fmt.Sprintf("⚠️ Noted but NOT saved to disk — will be lost on restart: %v", err))
 	}
 	_ = changed // reply is the same whether fields changed or repeated
-	return c.bot.SendText(fmt.Sprintf("📄 Noted: %s statement %s — total due ₹%.2f, due %s",
-		shortAccount(account), n.StatementDate.Format("02 Jan"), n.TotalDue, n.DueDate.Format("02 Jan")))
+	note := ""
+	if inferred {
+		note = " (statement date not in SMS — inferred as today)"
+	}
+	return c.bot.SendText(fmt.Sprintf("📄 Noted: %s statement %s%s — total due ₹%.2f, due %s",
+		shortAccount(account), stmtDate.Format("02 Jan"), note, n.TotalDue, n.DueDate.Format("02 Jan")))
 }
 
 func (c *Capability) handlePayment(n *PaymentNotice, exErr error) error {

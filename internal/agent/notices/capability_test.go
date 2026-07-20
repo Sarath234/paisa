@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ananthakumaran/paisa/internal/agent/billtruth"
 )
@@ -60,6 +61,43 @@ func TestHandleStatementAppliesFactsAndConfirms(t *testing.T) {
 	}
 	if len(bot.sent) != 1 || !strings.Contains(bot.sent[0], "ICIC6009") {
 		t.Fatalf("confirmation reply: %q", bot.sent)
+	}
+}
+
+// TestHandleStatementInfersDateWhenMissing covers a notice format with no
+// explicit statement date (e.g. real Axis "is generated" notices): the
+// capability must substitute Now() as PeriodEnd, apply the bill facts
+// under that date, and say so in the reply rather than silently guessing.
+func TestHandleStatementInfersDateWhenMissing(t *testing.T) {
+	store, err := billtruth.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bot := &fakeSender{}
+	c := NewCapability(store, bot, map[string]string{"1610": "Liabilities:CreditCard:MyZone1610"})
+	// billtruth.Apply normalizes incoming dates to LOCAL midnight (see
+	// billtruth/apply.go), so fixedNow must already be local to compare
+	// equal after the round-trip through the store — unlike day() (UTC),
+	// used elsewhere in this package for pure-extractor date comparisons.
+	fixedNow := time.Date(2026, 8, 1, 0, 0, 0, 0, time.Local)
+	c.Now = func() time.Time { return fixedNow }
+
+	sms := "Your statement for Axis Bank Credit Card no. XX1610 is generated.\n" +
+		"Due on: 07-08-26\n" +
+		"Total amt: INR  Dr. 24,567.89\n" +
+		"Min amt due: INR  Dr. 1,230.00"
+	if err := c.Handle(sms); err != nil {
+		t.Fatal(err)
+	}
+	bills := store.BillsFor("Liabilities:CreditCard:MyZone1610")
+	if len(bills) != 1 {
+		t.Fatalf("bills: %+v", bills)
+	}
+	if !bills[0].PeriodEnd.Equal(fixedNow) {
+		t.Errorf("PeriodEnd should default to Now(): got %v want %v", bills[0].PeriodEnd, fixedNow)
+	}
+	if len(bot.sent) != 1 || !strings.Contains(bot.sent[0], "inferred") {
+		t.Errorf("reply should mention the date was inferred: %q", bot.sent)
 	}
 }
 

@@ -55,6 +55,39 @@ func TestExtractStatementHDFC(t *testing.T) {
 	}
 }
 
+// TestExtractStatementAxisDueOnFormatNoStatementDate covers a real Axis
+// "statement generated" notice that never states a statement date at all
+// (only a due date) and phrases amounts as "Total amt:"/"Min amt due:" with
+// a "Dr." debit-indicator token between the currency and the figure. The
+// statement date must be left zero (not an error) — Capability substitutes
+// the notice's receipt date as an approximation.
+func TestExtractStatementAxisDueOnFormatNoStatementDate(t *testing.T) {
+	sms := "Your statement for Axis Bank Credit Card no. XX1610 is generated.\n" +
+		"Due on: 07-08-26\n" +
+		"Total amt: INR  Dr. 24,567.89\n" +
+		"Min amt due: INR  Dr. 1,230.00\n" +
+		"Pay at axis.bank.in/ccpaynow"
+	n, err := ExtractStatement(sms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n == nil {
+		t.Fatal("not recognized")
+	}
+	if n.Last4 != "1610" {
+		t.Errorf("last4: %q", n.Last4)
+	}
+	if !n.StatementDate.IsZero() {
+		t.Errorf("statement date should be absent for this format, got %v", n.StatementDate)
+	}
+	if n.TotalDue != 24567.89 || n.MinDue != 1230.00 {
+		t.Errorf("amounts: total=%v min=%v", n.TotalDue, n.MinDue)
+	}
+	if !n.DueDate.Equal(day("2026-08-07")) {
+		t.Errorf("due date: %v", n.DueDate)
+	}
+}
+
 func TestExtractStatementNotANotice(t *testing.T) {
 	n, err := ExtractStatement("INR 500.00 spent on ICICI Bank Card XX6009 at AMAZON on 12-Jul-26")
 	if n != nil || err != nil {

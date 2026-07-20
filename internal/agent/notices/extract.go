@@ -35,14 +35,24 @@ func LooksLikeStatement(sms string) bool {
 var (
 	reLast4    = regexp.MustCompile(`(?i)(?:XX|ending\s*|no\.\s*XX?)(\d{4})`)
 	reStmtDate = regexp.MustCompile(`(?i)(?:statement|card).{0,100}?dated\s+([0-9]{2}[-/][A-Za-z0-9]{2,3}[-/][0-9]{2,4})`)
-	reTotal    = regexp.MustCompile(`(?i)total\s+(?:amount\s+|amt\s+)?due\s*:?\s*(?:Rs\.?|INR)\s*([\d,]+\.?\d*)`)
-	reMin      = regexp.MustCompile(`(?i)min(?:imum)?\s+(?:amount\s+|amt\s+)?due\s*:?\s*(?:Rs\.?|INR)\s*([\d,]+\.?\d*)`)
-	reDue      = regexp.MustCompile(`(?i)(?:due\s+date|pay\s+by)\s*:?\s*([0-9]{2}[-/][A-Za-z0-9]{2,3}[-/][0-9]{2,4})`)
+	// reTotal/reMin: the amount/amt/due keywords and the "Dr." debit-indicator
+	// token are all optional-with-flexible-whitespace because bank wording
+	// varies on which of them appear and whether a space or colon separates
+	// them (e.g. ICICI's "Total Amount Due Rs 23,450.50" vs Axis's
+	// "Total amt: INR  Dr. 24,567.89" — the latter has no "due" on the
+	// Total line and a colon with no preceding space).
+	reTotal = regexp.MustCompile(`(?i)total\s+(?:amount|amt)?\s*(?:due)?\s*:?\s*(?:Rs\.?|INR)\s*(?:Dr\.?\s*)?([\d,]+\.?\d*)`)
+	reMin   = regexp.MustCompile(`(?i)min(?:imum)?\s+(?:amount|amt)?\s*due\s*:?\s*(?:Rs\.?|INR)\s*(?:Dr\.?\s*)?([\d,]+\.?\d*)`)
+	reDue   = regexp.MustCompile(`(?i)(?:due\s+date|pay\s+by|due\s+on)\s*:?\s*([0-9]{2}[-/][A-Za-z0-9]{2,3}[-/][0-9]{2,4})`)
 )
 
 // ExtractStatement parses a statement-generated notice.
-// (nil, nil) = not a statement notice. (nil, err) = recognized but a field
-// failed; err names the field so the Telegram reply is actionable.
+// (nil, nil) = not a statement notice. (nil, err) = recognized but a
+// mandatory field failed; err names the field so the Telegram reply is
+// actionable. StatementDate is the one OPTIONAL field: some banks' notices
+// (e.g. Axis's "is generated" wording) never state it, only a due date.
+// When absent, StatementDate is left zero — Capability.handleStatement
+// substitutes the notice's receipt date as an approximation.
 func ExtractStatement(sms string) (*StatementNotice, error) {
 	if !LooksLikeStatement(sms) {
 		return nil, nil
@@ -53,29 +63,34 @@ func ExtractStatement(sms string) (*StatementNotice, error) {
 		return nil, fmt.Errorf("card last-4 not found")
 	}
 	n.Last4 = m[1]
-	if m = reStmtDate.FindStringSubmatch(sms); m == nil {
-		return nil, fmt.Errorf("statement date not found")
+
+	if sm := reStmtDate.FindStringSubmatch(sms); sm != nil {
+		d, err := parseNoticeDate(sm[1])
+		if err != nil {
+			return nil, fmt.Errorf("statement date: %w", err)
+		}
+		n.StatementDate = d
 	}
-	d, err := parseNoticeDate(m[1])
-	if err != nil {
-		return nil, fmt.Errorf("statement date: %w", err)
-	}
-	n.StatementDate = d
+
 	if m = reTotal.FindStringSubmatch(sms); m == nil {
 		return nil, fmt.Errorf("total due not found")
 	}
 	n.TotalDue = parseAmount(m[1])
+
 	if m = reMin.FindStringSubmatch(sms); m == nil {
 		return nil, fmt.Errorf("minimum due not found")
 	}
 	n.MinDue = parseAmount(m[1])
+
 	if m = reDue.FindStringSubmatch(sms); m == nil {
 		return nil, fmt.Errorf("due date not found")
 	}
-	if d, err = parseNoticeDate(m[1]); err != nil {
+	d, err := parseNoticeDate(m[1])
+	if err != nil {
 		return nil, fmt.Errorf("due date: %w", err)
 	}
 	n.DueDate = d
+
 	return n, nil
 }
 
