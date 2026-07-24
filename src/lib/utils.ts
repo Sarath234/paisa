@@ -10,6 +10,7 @@ import { error } from "@sveltejs/kit";
 import { goto } from "$app/navigation";
 import chroma from "chroma-js";
 import { iconGlyph } from "./icon";
+import type { TruthStatus, TruthChannel } from "./truthBadge";
 
 export interface AutoCompleteItem {
   label: string;
@@ -513,6 +514,17 @@ export interface CreditCardBill {
   paidDate: dayjs.Dayjs;
   postings: Posting[];
   transactions: Transaction[];
+  dueDateStatus: TruthStatus;
+  dueDateChannel?: TruthChannel;
+  computedDueDate?: dayjs.Dayjs;
+  truthDueDate?: dayjs.Dayjs;
+  closingBalanceStatus: TruthStatus;
+  closingBalanceChannel?: TruthChannel;
+  computedClosingBalance?: number;
+  truthClosingBalance?: number;
+  paidDateStatus: TruthStatus;
+  paidDateChannel?: TruthChannel;
+  computedPaidDate?: dayjs.Dayjs;
 }
 
 export interface CreditCardSummary {
