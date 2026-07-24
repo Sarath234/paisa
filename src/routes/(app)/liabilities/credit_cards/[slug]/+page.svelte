@@ -15,6 +15,7 @@
     type CreditCardBill,
     type CreditCardSummary
   } from "$lib/utils";
+  import { channelLabel, badgeClass, badgeIcon } from "$lib/truthBadge";
   import { MasonryGrid } from "@egjs/svelte-grid";
   import _, { now } from "lodash";
   import { onMount } from "svelte";
@@ -115,7 +116,17 @@
                 <div class="ml-3 whitespace-nowrap">
                   <span class="mr-1 is-size-7 has-text-grey">Payment</span>
                   <span
-                    ><DueDate dueDate={currentBill.dueDate} paidDate={currentBill.paidDate} /></span
+                    ><DueDate
+                      dueDate={currentBill.dueDate}
+                      paidDate={currentBill.paidDate}
+                      dueDateStatus={currentBill.dueDateStatus}
+                      dueDateChannel={currentBill.dueDateChannel}
+                      computedDueDate={currentBill.computedDueDate}
+                      truthDueDate={currentBill.truthDueDate}
+                      paidDateStatus={currentBill.paidDateStatus}
+                      paidDateChannel={currentBill.paidDateChannel}
+                      computedPaidDate={currentBill.computedPaidDate}
+                    /></span
                   >
                 </div>
               </div>
@@ -177,7 +188,24 @@
               title="Amount Due"
               color={COLORS.liabilities}
               value={formatCurrency(currentBill.closingBalance)}
-            />
+            >
+              {#if currentBill.closingBalanceStatus !== "computed"}
+                <span
+                  class="tag is-rounded is-small ml-1 {badgeClass(
+                    currentBill.closingBalanceStatus
+                  )}"
+                  title={currentBill.closingBalanceStatus === "corrected"
+                    ? `Corrected to ${formatCurrency(
+                        currentBill.truthClosingBalance
+                      )} via ${channelLabel(
+                        currentBill.closingBalanceChannel
+                      )} (computed: ${formatCurrency(currentBill.computedClosingBalance)})`
+                    : `Confirmed via ${channelLabel(currentBill.closingBalanceChannel)}`}
+                >
+                  <i class="fas {badgeIcon(currentBill.closingBalanceStatus)} is-size-7" />
+                </span>
+              {/if}
+            </LevelItem>
           </nav>
 
           <div>

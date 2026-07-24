@@ -13,9 +13,9 @@
   <div>
     <p class="heading">{title}</p>
     {#if color}
-      <p class="title" style="padding: 5px; color: {color};">{value}</p>
+      <p class="title" style="padding: 5px; color: {color};">{value}<slot /></p>
     {:else}
-      <p class="title has-text-grey-dark">{value}</p>
+      <p class="title has-text-grey-dark">{value}<slot /></p>
     {/if}
     {#if !_.isEmpty(subtitle)}
       <div class="sub-title">{subtitle}</div>

@@ -8,6 +8,7 @@
     now,
     type CreditCardBill
   } from "$lib/utils";
+  import { channelLabel, badgeClass, badgeIcon } from "$lib/truthBadge";
   import _ from "lodash";
   import CreditCardNetwork from "./CreditCardNetwork.svelte";
   import DueDate from "./DueDate.svelte";
@@ -71,9 +72,31 @@
         </div>
         <div>
           <span class="is-size-4 has-text-grey-dark">{formatCurrency(bill.closingBalance)}</span>
+          {#if bill.closingBalanceStatus !== "computed"}
+            <span
+              class="tag is-rounded is-small ml-1 {badgeClass(bill.closingBalanceStatus)}"
+              title={bill.closingBalanceStatus === "corrected"
+                ? `Corrected to ${formatCurrency(bill.truthClosingBalance)} via ${channelLabel(
+                    bill.closingBalanceChannel
+                  )} (computed: ${formatCurrency(bill.computedClosingBalance)})`
+                : `Confirmed via ${channelLabel(bill.closingBalanceChannel)}`}
+            >
+              <i class="fas {badgeIcon(bill.closingBalanceStatus)} is-size-7" />
+            </span>
+          {/if}
         </div>
         <div class="is-size-7 has-text-grey">
-          <DueDate dueDate={bill.dueDate} paidDate={bill.paidDate} />
+          <DueDate
+            dueDate={bill.dueDate}
+            paidDate={bill.paidDate}
+            dueDateStatus={bill.dueDateStatus}
+            dueDateChannel={bill.dueDateChannel}
+            computedDueDate={bill.computedDueDate}
+            truthDueDate={bill.truthDueDate}
+            paidDateStatus={bill.paidDateStatus}
+            paidDateChannel={bill.paidDateChannel}
+            computedPaidDate={bill.computedPaidDate}
+          />
         </div>
       {/if}
     </div>
