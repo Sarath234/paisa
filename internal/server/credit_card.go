@@ -44,6 +44,21 @@ type CreditCardBill struct {
 	ClosingBalance       decimal.Decimal           `json:"closingBalance"`
 	Postings             []posting.Posting         `json:"postings"`
 	Transactions         []transaction.Transaction `json:"transactions"`
+
+	DueDateStatus   string     `json:"dueDateStatus"` // "computed" | "confirmed" | "corrected"
+	DueDateChannel  *string    `json:"dueDateChannel,omitempty"`
+	ComputedDueDate *time.Time `json:"computedDueDate,omitempty"`
+	TruthDueDate    *time.Time `json:"truthDueDate,omitempty"`
+
+	ClosingBalanceStatus   string           `json:"closingBalanceStatus"`
+	ClosingBalanceChannel  *string          `json:"closingBalanceChannel,omitempty"`
+	ComputedClosingBalance *decimal.Decimal `json:"computedClosingBalance,omitempty"`
+	TruthClosingBalance    *decimal.Decimal `json:"truthClosingBalance,omitempty"`
+
+	PaidDateStatus   string     `json:"paidDateStatus"`
+	PaidDateChannel  *string    `json:"paidDateChannel,omitempty"`
+	ComputedPaidDate *time.Time `json:"computedPaidDate,omitempty"`
+	TruthPaidDate    *time.Time `json:"truthPaidDate,omitempty"`
 }
 
 // truthBill is a local decode struct for one entry in bill-truth.json,
@@ -96,6 +111,125 @@ func matchTruthBill(bills []truthBill, statementEndDate time.Time) *truthBill {
 	return nil
 }
 
+// authoritySMS/authorityPDF duplicate billtruth.AuthoritySMS/AuthorityPDF's
+// values deliberately — core paisa does not import internal/agent/billtruth
+// (see loadBillTruth). Never reorder; persisted in bill-truth.json as ints.
+const (
+	authoritySMS = 1
+	authorityPDF = 2
+)
+
+// applyTruth overlays bank-message-derived facts onto a computed
+// CreditCardBill, per field, only when bill-truth.json's authority for
+// that field is at least SMS — never for merely api-sourced truth, which
+// is just this same computed value re-derived by the agent from this same
+// server. truth may be nil (no bill-truth.json, or no bill within ±7 days
+// of this cycle's close) — every field then stays "computed", identical
+// to today's behavior.
+func applyTruth(bill *CreditCardBill, truth *truthBill) {
+	if truth == nil {
+		bill.DueDateStatus = "computed"
+		bill.ClosingBalanceStatus = "computed"
+		bill.PaidDateStatus = "computed"
+		return
+	}
+
+	dueAuthority := truth.Sources["due_date"]
+	bill.DueDateStatus = fieldStatus(dueAuthority, bill.DueDate, truth.DueDate)
+	if bill.DueDateStatus != "computed" {
+		channel := channelLabel(dueAuthority)
+		bill.DueDateChannel = &channel
+		if bill.DueDateStatus == "corrected" {
+			computed, truthVal := bill.DueDate, truth.DueDate
+			bill.ComputedDueDate, bill.TruthDueDate = &computed, &truthVal
+		}
+		bill.DueDate = truth.DueDate
+	}
+
+	totalAuthority := truth.Sources["total_due"]
+	bill.ClosingBalanceStatus = amountFieldStatus(totalAuthority, bill.ClosingBalance, truth.TotalDue)
+	if bill.ClosingBalanceStatus != "computed" {
+		channel := channelLabel(totalAuthority)
+		bill.ClosingBalanceChannel = &channel
+		truthAmt := decimal.NewFromFloat(truth.TotalDue)
+		if bill.ClosingBalanceStatus == "corrected" {
+			computed := bill.ClosingBalance
+			bill.ComputedClosingBalance, bill.TruthClosingBalance = &computed, &truthAmt
+		}
+		bill.ClosingBalance = truthAmt
+	}
+
+	paidAuthority := truth.Sources["paid_date"]
+	bill.PaidDateStatus = paidDateStatus(paidAuthority, bill.PaidDate, truth.PaidDate)
+	if bill.PaidDateStatus != "computed" {
+		channel := channelLabel(paidAuthority)
+		bill.PaidDateChannel = &channel
+		if bill.PaidDateStatus == "corrected" {
+			bill.ComputedPaidDate = bill.PaidDate // may be nil — that IS the mismatch
+			bill.TruthPaidDate = truth.PaidDate
+		}
+		bill.PaidDate = truth.PaidDate
+	}
+}
+
+// fieldStatus: authority below AuthoritySMS (including the zero-value for
+// a field bill-truth.json never set) → "computed". Otherwise "corrected"
+// if computed/truth disagree on calendar day, else "confirmed".
+func fieldStatus(authority int, computed, truthVal time.Time) string {
+	if authority < authoritySMS {
+		return "computed"
+	}
+	if !sameDay(computed, truthVal) {
+		return "corrected"
+	}
+	return "confirmed"
+}
+
+// amountFieldStatus: same authority gate; "confirmed" tolerates ≤ ₹1
+// difference (matches the cc_statement Telegram monitor's own correction
+// threshold), else "corrected".
+func amountFieldStatus(authority int, computed decimal.Decimal, truthAmount float64) string {
+	if authority < authoritySMS {
+		return "computed"
+	}
+	diff := computed.Sub(decimal.NewFromFloat(truthAmount)).Abs()
+	if diff.GreaterThan(decimal.NewFromInt(1)) {
+		return "corrected"
+	}
+	return "confirmed"
+}
+
+// paidDateStatus: presence/absence mismatch (nil vs set) is itself
+// "corrected" — that's the whole point of forwarding a payment SMS/PDF.
+func paidDateStatus(authority int, computedPaidDate, truthPaidDate *time.Time) string {
+	if authority < authoritySMS {
+		return "computed"
+	}
+	switch {
+	case truthPaidDate == nil && computedPaidDate == nil:
+		return "confirmed"
+	case truthPaidDate == nil || computedPaidDate == nil:
+		return "corrected"
+	case sameDay(*truthPaidDate, *computedPaidDate):
+		return "confirmed"
+	default:
+		return "corrected"
+	}
+}
+
+func channelLabel(authority int) string {
+	if authority >= authorityPDF {
+		return "pdf"
+	}
+	return "sms"
+}
+
+func sameDay(a, b time.Time) bool {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	return ay == by && am == bm && ad == bd
+}
+
 func GetCreditCards(db *gorm.DB) gin.H {
 	creditCards := []CreditCardSummary{}
 
@@ -136,6 +270,13 @@ func yearlySpends(db *gorm.DB, date time.Time, postings []posting.Posting) map[s
 
 func buildCreditCard(db *gorm.DB, creditCardConfig config.CreditCard, ps []posting.Posting, includePostings bool) CreditCardSummary {
 	bills := computeBills(db, creditCardConfig, ps, includePostings)
+
+	journalDir := filepath.Dir(config.GetJournalPath())
+	truthBills := loadBillTruth(journalDir, creditCardConfig.Account)
+	for i := range bills {
+		applyTruth(&bills[i], matchTruthBill(truthBills, bills[i].StatementEndDate))
+	}
+
 	balance := decimal.Zero
 	if len(bills) > 0 {
 		balance = bills[len(bills)-1].ClosingBalance
