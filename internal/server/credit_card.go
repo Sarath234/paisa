@@ -1,6 +1,10 @@
 package server
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/accounting"
@@ -40,6 +44,56 @@ type CreditCardBill struct {
 	ClosingBalance       decimal.Decimal           `json:"closingBalance"`
 	Postings             []posting.Posting         `json:"postings"`
 	Transactions         []transaction.Transaction `json:"transactions"`
+}
+
+// truthBill is a local decode struct for one entry in bill-truth.json,
+// written by paisa-agent's internal/agent/billtruth package. Deliberately
+// NOT importing that package — core paisa stays decoupled from agent
+// internals, matching doctor.go's reconciliation.json pattern exactly.
+type truthBill struct {
+	PeriodEnd time.Time      `json:"periodEnd"`
+	DueDate   time.Time      `json:"dueDate"`
+	TotalDue  float64        `json:"totalDue"`
+	PaidDate  *time.Time     `json:"paidDate"`
+	Sources   map[string]int `json:"sources"` // field name -> authority (0 api, 1 sms, 2 pdf)
+}
+
+// loadBillTruth reads bill-truth.json from journalDir and returns the
+// account's bills, newest PeriodEnd first. A missing file, an unreadable
+// file, or a corrupt file all return nil — never an error — mirroring
+// doctor.go's ruleStatementReconciliation handling of reconciliation.json.
+func loadBillTruth(journalDir, account string) []truthBill {
+	path := filepath.Join(journalDir, "bill-truth.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var all map[string][]truthBill
+	if err := json.Unmarshal(data, &all); err != nil {
+		return nil
+	}
+	bills := all[account]
+	sort.Slice(bills, func(i, j int) bool { return bills[i].PeriodEnd.After(bills[j].PeriodEnd) })
+	return bills
+}
+
+// matchTruthBill finds the truth bill whose PeriodEnd is within ±7 days of
+// statementEndDate — the same identity fuzz billtruth uses internally
+// (apply.go's findBillLocked) — or nil. bills must already be sorted
+// newest-PeriodEnd-first (loadBillTruth does this), so the first match is
+// also the newest.
+func matchTruthBill(bills []truthBill, statementEndDate time.Time) *truthBill {
+	const window = 7 * 24 * time.Hour
+	for i := range bills {
+		diff := bills[i].PeriodEnd.Sub(statementEndDate)
+		if diff < 0 {
+			diff = -diff
+		}
+		if diff <= window {
+			return &bills[i]
+		}
+	}
+	return nil
 }
 
 func GetCreditCards(db *gorm.DB) gin.H {
