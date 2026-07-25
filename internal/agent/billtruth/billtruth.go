@@ -4,15 +4,23 @@
 // the bank's actual dates/amounts, not computed approximations.
 package billtruth
 
-import "time"
+import (
+	"time"
+
+	"github.com/ananthakumaran/paisa/internal/truthcompare"
+)
 
 // Authority ranks fact sources. Persisted as ints — never reorder.
-type Authority int
+// Aliased from truthcompare so bill-truth.json's encoding and every
+// existing billtruth call site (AuthoritySMS, Bill.Sources, etc.) are
+// unchanged; truthcompare is the canonical definition, shared with
+// internal/server (see internal/truthcompare's package doc).
+type Authority = truthcompare.Authority
 
 const (
-	AuthorityAPI Authority = iota // computed from paisa.yaml cycle days
-	AuthoritySMS                  // bank statement/payment SMS
-	AuthorityPDF                  // parsed statement PDF
+	AuthorityAPI = truthcompare.AuthorityAPI // computed from paisa.yaml cycle days
+	AuthoritySMS = truthcompare.AuthoritySMS // bank statement/payment SMS
+	AuthorityPDF = truthcompare.AuthorityPDF // parsed statement PDF
 )
 
 // Bill is one statement cycle's truth-merged facts. Sources records, per
