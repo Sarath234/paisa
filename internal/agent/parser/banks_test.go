@@ -77,6 +77,15 @@ func TestExtractAxisChecking(t *testing.T) {
 		assert.Equal(t, "2000.00", a)
 		assert.True(t, debit)
 	})
+	t.Run("format_a_debited_from_on_merchant", func(t *testing.T) {
+		sms := "INR 378.78 debited from A/c no. XX116386 on BOOKMYSHOW  24-07-2026 23:14:20 IST. Avl bal: INR 715912.87. Not you? SMS BLOCKCARD XX5851 to +919951860002 - Axis Bank"
+		m, d, a, debit, err := parser.ExtractAxisChecking(sms)
+		assert.NoError(t, err)
+		assert.Equal(t, "BOOKMYSHOW", m)
+		assert.Equal(t, "24-07-2026", d)
+		assert.Equal(t, "378.78", a)
+		assert.True(t, debit)
+	})
 }
 
 func TestExtractAxisUPI(t *testing.T) {

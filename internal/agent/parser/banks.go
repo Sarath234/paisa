@@ -59,26 +59,32 @@ func ExtractHdfcCC(sms string) (merchant, rawDate, rawAmt string, isDebit bool, 
 
 // ── Axis Bank Checking ───────────────────────────────────────────────────────
 // "INR 1804.05 debited\nA/c no. XX6386\n03-06-26, 10:21:54\nUPI/P2M/102154212206/IRCTC Rail Web\n..."
+// Also (single-line POS/card form): "INR 378.78 debited from A/c no. XX116386 on BOOKMYSHOW  24-07-2026 23:14:20 IST. ..."
 
 var axisChkAmtRe = regexp.MustCompile(`(?i)INR\s+([\d,]+(?:\.\d{1,2})?)\s+(debited|credited)`)
 var axisChkAmtReB = regexp.MustCompile(`(?im)^(Debit|Credit)\s+INR\s+([\d,]+(?:\.\d{1,2})?)`)
-var axisChkDateRe = regexp.MustCompile(`\b(\d{2}-\d{2}-\d{2})\b`)
+var axisChkDateRe = regexp.MustCompile(`\b(\d{2}-\d{2}-(?:\d{4}|\d{2}))\b`)
 var axisChkUPIRe = regexp.MustCompile(`(?i)(UPI/[^\n]+)`)
+var axisChkOnMerchantRe = regexp.MustCompile(`(?i)\bon\s+(.+?)\s{2,}\d{2}-\d{2}-\d{4}\b`)
 
 func ExtractAxisChecking(sms string) (merchant, rawDate, rawAmt string, isDebit bool, err error) {
 	// Format A: "INR X debited/credited\nA/c no. XX...\nDD-MM-YY, HH:MM:SS\nUPI/P2M/.../Merchant"
+	// or the single-line "... debited from A/c no. XX... on <merchant>  DD-MM-YYYY ..." form.
 	if amtM := axisChkAmtRe.FindStringSubmatch(sms); amtM != nil {
 		dateM := axisChkDateRe.FindStringSubmatch(sms)
 		if dateM == nil {
-			log.Debugf("axis_checking: no date match — rawAmt=%q; pattern expects DD-MM-YY", amtM[1])
+			log.Debugf("axis_checking: no date match — rawAmt=%q; pattern expects DD-MM-YY or DD-MM-YYYY", amtM[1])
 			return "", "", "", false, fmt.Errorf("axis_checking: no date")
 		}
 		merchantStr := ""
 		if upiM := axisChkUPIRe.FindStringSubmatch(sms); upiM != nil {
 			merchantStr = extractUPIMerchant(upiM[1])
 			log.Debugf("axis_checking: UPI ref=%q → merchant=%q", upiM[1], merchantStr)
+		} else if onM := axisChkOnMerchantRe.FindStringSubmatch(sms); onM != nil {
+			merchantStr = strings.TrimSpace(onM[1])
+			log.Debugf("axis_checking: 'on <merchant>' match → merchant=%q", merchantStr)
 		} else {
-			log.Debugf("axis_checking: no UPI ref found — merchant will be empty (LLM fallback)")
+			log.Debugf("axis_checking: no UPI ref or 'on <merchant>' found — merchant will be empty (LLM fallback)")
 		}
 		debit := strings.ToLower(amtM[2]) == "debited"
 		log.Debugf("axis_checking/A: rawAmt=%q rawDate=%q isDebit=%v merchant=%q", amtM[1], dateM[1], debit, merchantStr)
