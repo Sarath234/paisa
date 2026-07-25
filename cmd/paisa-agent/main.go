@@ -377,6 +377,21 @@ func handleCallback(
 		bot.EditMessage(msgID, "⏭ Skipped\n\n"+telegram.FormatDraft(pending.Entry))
 		store.Delete(msgID)
 
+	case "food", "groceries":
+		pending := store.Get(msgID)
+		if pending == nil {
+			log.Debugf("callback for unknown messageID %d (agent may have restarted)", msgID)
+			return
+		}
+		if data == "food" {
+			pending.Entry.Dest = "Expenses:Food:Hyd"
+		} else {
+			pending.Entry.Dest = "Expenses:Groceries:Hyd"
+		}
+		if err := bot.EditDraft(msgID, telegram.FormatDraft(pending.Entry)); err != nil {
+			log.Errorf("update draft dest to %q: %v", pending.Entry.Dest, err)
+		}
+
 	case "add_rule":
 		rule := ruleStore.Get(msgID)
 		if rule == nil {
