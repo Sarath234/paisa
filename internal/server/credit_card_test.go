@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ananthakumaran/paisa/internal/truthcompare"
 	"github.com/shopspring/decimal"
 )
 
@@ -96,7 +97,7 @@ func TestFieldStatusComputedWhenAuthorityBelowSMS(t *testing.T) {
 
 func TestFieldStatusConfirmedWhenSameCalendarDay(t *testing.T) {
 	d := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
-	got := fieldStatus(authoritySMS, d, d)
+	got := fieldStatus(truthcompare.AuthoritySMS, d, d)
 	if got != "confirmed" {
 		t.Fatalf("want confirmed, got %s", got)
 	}
@@ -105,21 +106,21 @@ func TestFieldStatusConfirmedWhenSameCalendarDay(t *testing.T) {
 func TestFieldStatusCorrectedWhenDifferentCalendarDay(t *testing.T) {
 	computed := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
 	truthDate := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	got := fieldStatus(authoritySMS, computed, truthDate)
+	got := fieldStatus(truthcompare.AuthoritySMS, computed, truthDate)
 	if got != "corrected" {
 		t.Fatalf("want corrected, got %s", got)
 	}
 }
 
 func TestAmountFieldStatusToleratesExactlyOneRupee(t *testing.T) {
-	got := amountFieldStatus(authoritySMS, decimal.NewFromFloat(1000), 999)
+	got := amountFieldStatus(truthcompare.AuthoritySMS, decimal.NewFromFloat(1000), 999)
 	if got != "confirmed" {
 		t.Fatalf("want confirmed at exactly ₹1 diff, got %s", got)
 	}
 }
 
 func TestAmountFieldStatusCorrectedJustOverOneRupee(t *testing.T) {
-	got := amountFieldStatus(authoritySMS, decimal.NewFromFloat(1000), 998.99)
+	got := amountFieldStatus(truthcompare.AuthoritySMS, decimal.NewFromFloat(1000), 998.99)
 	if got != "corrected" {
 		t.Fatalf("want corrected just over ₹1 diff, got %s", got)
 	}
@@ -133,7 +134,7 @@ func TestAmountFieldStatusComputedWhenAuthorityIsAPI(t *testing.T) {
 }
 
 func TestPaidDateStatusBothNilIsConfirmed(t *testing.T) {
-	got := paidDateStatus(authoritySMS, nil, nil)
+	got := paidDateStatus(truthcompare.AuthoritySMS, nil, nil)
 	if got != "confirmed" {
 		t.Fatalf("want confirmed, got %s", got)
 	}
@@ -141,7 +142,7 @@ func TestPaidDateStatusBothNilIsConfirmed(t *testing.T) {
 
 func TestPaidDateStatusNilVsSetIsCorrected(t *testing.T) {
 	d := time.Date(2026, 7, 25, 0, 0, 0, 0, time.UTC)
-	got := paidDateStatus(authoritySMS, nil, &d)
+	got := paidDateStatus(truthcompare.AuthoritySMS, nil, &d)
 	if got != "corrected" {
 		t.Fatalf("want corrected, got %s", got)
 	}
@@ -150,20 +151,20 @@ func TestPaidDateStatusNilVsSetIsCorrected(t *testing.T) {
 func TestPaidDateStatusSameDayIsConfirmed(t *testing.T) {
 	a := time.Date(2026, 7, 25, 9, 0, 0, 0, time.UTC)
 	b := time.Date(2026, 7, 25, 23, 0, 0, 0, time.UTC)
-	got := paidDateStatus(authoritySMS, &a, &b)
+	got := paidDateStatus(truthcompare.AuthoritySMS, &a, &b)
 	if got != "confirmed" {
 		t.Fatalf("want confirmed for same calendar day, got %s", got)
 	}
 }
 
 func TestChannelLabelPdfWhenAuthorityAtLeastPdf(t *testing.T) {
-	if got := channelLabel(authorityPDF); got != "pdf" {
+	if got := truthcompare.ChannelLabel(truthcompare.AuthorityPDF); got != "pdf" {
 		t.Fatalf("want pdf, got %s", got)
 	}
 }
 
 func TestChannelLabelSmsWhenAuthorityBelowPdf(t *testing.T) {
-	if got := channelLabel(authoritySMS); got != "sms" {
+	if got := truthcompare.ChannelLabel(truthcompare.AuthoritySMS); got != "sms" {
 		t.Fatalf("want sms, got %s", got)
 	}
 }
@@ -180,7 +181,7 @@ func TestApplyTruthCorrectedDueDateSetsComputedAndTruthPairAndChannel(t *testing
 	computed := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
 	truthDate := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	bill := &CreditCardBill{DueDate: computed, ClosingBalance: decimal.NewFromInt(100)}
-	truth := &truthBill{DueDate: truthDate, TotalDue: 100, Sources: map[string]int{"due_date": authoritySMS}}
+	truth := &truthBill{DueDate: truthDate, TotalDue: 100, Sources: map[string]truthcompare.Authority{"due_date": truthcompare.AuthoritySMS}}
 
 	applyTruth(bill, truth)
 
@@ -204,7 +205,7 @@ func TestApplyTruthCorrectedDueDateSetsComputedAndTruthPairAndChannel(t *testing
 func TestApplyTruthConfirmedLeavesComputedTruthPairNil(t *testing.T) {
 	d := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
 	bill := &CreditCardBill{DueDate: d, ClosingBalance: decimal.NewFromInt(100)}
-	truth := &truthBill{DueDate: d, TotalDue: 100, Sources: map[string]int{"due_date": authoritySMS}}
+	truth := &truthBill{DueDate: d, TotalDue: 100, Sources: map[string]truthcompare.Authority{"due_date": truthcompare.AuthoritySMS}}
 
 	applyTruth(bill, truth)
 
@@ -218,7 +219,7 @@ func TestApplyTruthConfirmedLeavesComputedTruthPairNil(t *testing.T) {
 
 func TestApplyTruthCorrectedClosingBalanceSetsPair(t *testing.T) {
 	bill := &CreditCardBill{DueDate: time.Now(), ClosingBalance: decimal.NewFromFloat(1000)}
-	truth := &truthBill{DueDate: bill.DueDate, TotalDue: 1500, Sources: map[string]int{"total_due": authorityPDF}}
+	truth := &truthBill{DueDate: bill.DueDate, TotalDue: 1500, Sources: map[string]truthcompare.Authority{"total_due": truthcompare.AuthorityPDF}}
 
 	applyTruth(bill, truth)
 
@@ -242,7 +243,7 @@ func TestApplyTruthCorrectedClosingBalanceSetsPair(t *testing.T) {
 func TestApplyTruthCorrectedPaidDateComputedNilIsPreserved(t *testing.T) {
 	paidDate := time.Date(2026, 7, 28, 0, 0, 0, 0, time.UTC)
 	bill := &CreditCardBill{DueDate: time.Now(), ClosingBalance: decimal.NewFromInt(100), PaidDate: nil}
-	truth := &truthBill{DueDate: bill.DueDate, TotalDue: 100, PaidDate: &paidDate, Sources: map[string]int{"paid_date": authoritySMS}}
+	truth := &truthBill{DueDate: bill.DueDate, TotalDue: 100, PaidDate: &paidDate, Sources: map[string]truthcompare.Authority{"paid_date": truthcompare.AuthoritySMS}}
 
 	applyTruth(bill, truth)
 

@@ -13,6 +13,7 @@ import (
 	"github.com/ananthakumaran/paisa/internal/model/transaction"
 	"github.com/ananthakumaran/paisa/internal/query"
 	"github.com/ananthakumaran/paisa/internal/service"
+	"github.com/ananthakumaran/paisa/internal/truthcompare"
 	"github.com/ananthakumaran/paisa/internal/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
@@ -65,12 +66,14 @@ type CreditCardBill struct {
 // written by paisa-agent's internal/agent/billtruth package. Deliberately
 // NOT importing that package — core paisa stays decoupled from agent
 // internals, matching doctor.go's reconciliation.json pattern exactly.
+// Authority comparison itself is shared via internal/truthcompare, which
+// has no dependency on internal/agent, so this boundary holds.
 type truthBill struct {
-	PeriodEnd time.Time      `json:"periodEnd"`
-	DueDate   time.Time      `json:"dueDate"`
-	TotalDue  float64        `json:"totalDue"`
-	PaidDate  *time.Time     `json:"paidDate"`
-	Sources   map[string]int `json:"sources"` // field name -> authority (0 api, 1 sms, 2 pdf)
+	PeriodEnd time.Time                         `json:"periodEnd"`
+	DueDate   time.Time                         `json:"dueDate"`
+	TotalDue  float64                           `json:"totalDue"`
+	PaidDate  *time.Time                        `json:"paidDate"`
+	Sources   map[string]truthcompare.Authority `json:"sources"` // field name -> authority
 }
 
 // loadBillTruth reads bill-truth.json from journalDir and returns the
@@ -100,24 +103,12 @@ func loadBillTruth(journalDir, account string) []truthBill {
 func matchTruthBill(bills []truthBill, statementEndDate time.Time) *truthBill {
 	const window = 7 * 24 * time.Hour
 	for i := range bills {
-		diff := bills[i].PeriodEnd.Sub(statementEndDate)
-		if diff < 0 {
-			diff = -diff
-		}
-		if diff <= window {
+		if truthcompare.WithinWindow(bills[i].PeriodEnd, statementEndDate, window) {
 			return &bills[i]
 		}
 	}
 	return nil
 }
-
-// authoritySMS/authorityPDF duplicate billtruth.AuthoritySMS/AuthorityPDF's
-// values deliberately — core paisa does not import internal/agent/billtruth
-// (see loadBillTruth). Never reorder; persisted in bill-truth.json as ints.
-const (
-	authoritySMS = 1
-	authorityPDF = 2
-)
 
 // applyTruth overlays bank-message-derived facts onto a computed
 // CreditCardBill, per field, only when bill-truth.json's authority for
@@ -137,7 +128,7 @@ func applyTruth(bill *CreditCardBill, truth *truthBill) {
 	dueAuthority := truth.Sources["due_date"]
 	bill.DueDateStatus = fieldStatus(dueAuthority, bill.DueDate, truth.DueDate)
 	if bill.DueDateStatus != "computed" {
-		channel := channelLabel(dueAuthority)
+		channel := truthcompare.ChannelLabel(dueAuthority)
 		bill.DueDateChannel = &channel
 		if bill.DueDateStatus == "corrected" {
 			computed, truthVal := bill.DueDate, truth.DueDate
@@ -149,7 +140,7 @@ func applyTruth(bill *CreditCardBill, truth *truthBill) {
 	totalAuthority := truth.Sources["total_due"]
 	bill.ClosingBalanceStatus = amountFieldStatus(totalAuthority, bill.ClosingBalance, truth.TotalDue)
 	if bill.ClosingBalanceStatus != "computed" {
-		channel := channelLabel(totalAuthority)
+		channel := truthcompare.ChannelLabel(totalAuthority)
 		bill.ClosingBalanceChannel = &channel
 		truthAmt := decimal.NewFromFloat(truth.TotalDue)
 		if bill.ClosingBalanceStatus == "corrected" {
@@ -162,7 +153,7 @@ func applyTruth(bill *CreditCardBill, truth *truthBill) {
 	paidAuthority := truth.Sources["paid_date"]
 	bill.PaidDateStatus = paidDateStatus(paidAuthority, bill.PaidDate, truth.PaidDate)
 	if bill.PaidDateStatus != "computed" {
-		channel := channelLabel(paidAuthority)
+		channel := truthcompare.ChannelLabel(paidAuthority)
 		bill.PaidDateChannel = &channel
 		if bill.PaidDateStatus == "corrected" {
 			bill.ComputedPaidDate = bill.PaidDate // may be nil — that IS the mismatch
@@ -172,62 +163,29 @@ func applyTruth(bill *CreditCardBill, truth *truthBill) {
 	}
 }
 
-// fieldStatus: authority below AuthoritySMS (including the zero-value for
-// a field bill-truth.json never set) → "computed". Otherwise "corrected"
-// if computed/truth disagree on calendar day, else "confirmed".
-func fieldStatus(authority int, computed, truthVal time.Time) string {
-	if authority < authoritySMS {
-		return "computed"
-	}
-	if !sameDay(computed, truthVal) {
-		return "corrected"
-	}
-	return "confirmed"
+// fieldStatus labels a date field's computed-vs-truth agreement.
+// truthcompare.FieldStatus owns the authority gate (below AuthoritySMS
+// → "computed" regardless of agreement) and the confirmed/corrected
+// label; this wrapper only supplies the date-specific agreement check.
+func fieldStatus(authority truthcompare.Authority, computed, truthVal time.Time) string {
+	return string(truthcompare.FieldStatus(authority, truthcompare.SameDay(computed, truthVal)))
 }
 
-// amountFieldStatus: same authority gate; "confirmed" tolerates ≤ ₹1
-// difference (matches the cc_statement Telegram monitor's own correction
-// threshold), else "corrected".
-func amountFieldStatus(authority int, computed decimal.Decimal, truthAmount float64) string {
-	if authority < authoritySMS {
-		return "computed"
-	}
-	diff := computed.Sub(decimal.NewFromFloat(truthAmount)).Abs()
-	if diff.GreaterThan(decimal.NewFromInt(1)) {
-		return "corrected"
-	}
-	return "confirmed"
+// amountFieldStatus: "confirmed" tolerates ≤ ₹1 difference (matches the
+// cc_statement Telegram monitor's own correction threshold), else
+// "corrected". Authority gate delegated to truthcompare.FieldStatus.
+func amountFieldStatus(authority truthcompare.Authority, computed decimal.Decimal, truthAmount float64) string {
+	agrees := computed.Sub(decimal.NewFromFloat(truthAmount)).Abs().LessThanOrEqual(decimal.NewFromInt(1))
+	return string(truthcompare.FieldStatus(authority, agrees))
 }
 
 // paidDateStatus: presence/absence mismatch (nil vs set) is itself
-// "corrected" — that's the whole point of forwarding a payment SMS/PDF.
-func paidDateStatus(authority int, computedPaidDate, truthPaidDate *time.Time) string {
-	if authority < authoritySMS {
-		return "computed"
-	}
-	switch {
-	case truthPaidDate == nil && computedPaidDate == nil:
-		return "confirmed"
-	case truthPaidDate == nil || computedPaidDate == nil:
-		return "corrected"
-	case sameDay(*truthPaidDate, *computedPaidDate):
-		return "confirmed"
-	default:
-		return "corrected"
-	}
-}
-
-func channelLabel(authority int) string {
-	if authority >= authorityPDF {
-		return "pdf"
-	}
-	return "sms"
-}
-
-func sameDay(a, b time.Time) bool {
-	ay, am, ad := a.Date()
-	by, bm, bd := b.Date()
-	return ay == by && am == bm && ad == bd
+// disagreement — that's the whole point of forwarding a payment
+// SMS/PDF. Authority gate delegated to truthcompare.FieldStatus.
+func paidDateStatus(authority truthcompare.Authority, computedPaidDate, truthPaidDate *time.Time) string {
+	agrees := (truthPaidDate == nil) == (computedPaidDate == nil) &&
+		(truthPaidDate == nil || truthcompare.SameDay(*truthPaidDate, *computedPaidDate))
+	return string(truthcompare.FieldStatus(authority, agrees))
 }
 
 func GetCreditCards(db *gorm.DB) gin.H {
