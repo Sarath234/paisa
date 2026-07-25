@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/agent/statement"
+	"github.com/ananthakumaran/paisa/internal/truthcompare"
 )
 
 // LedgerEntry is a posting from the paisa ledger relevant to reconciliation.
@@ -51,7 +52,7 @@ func Compare(result statement.ParseResult, ledger []LedgerEntry) Diff {
 			if ledgerUsed[i] {
 				continue
 			}
-			if !sameDay(tx.Date, le.Date) {
+			if !truthcompare.SameDay(tx.Date, le.Date) {
 				continue
 			}
 			if math.Abs(le.Amount-txAmt) <= amountEpsilon {
@@ -112,11 +113,7 @@ func CompareCC(res statement.CCResult, ledger []LedgerEntry) Diff {
 			if math.Abs(le.Amount-txAmt) > amountEpsilon {
 				continue
 			}
-			gap := le.Date.Sub(tx.Date)
-			if gap < 0 {
-				gap = -gap
-			}
-			if gap > window {
+			if !truthcompare.WithinWindow(le.Date, tx.Date, window) {
 				continue
 			}
 			// Earliest-dated candidate wins; equal dates: lowest index.
@@ -137,10 +134,4 @@ func CompareCC(res statement.CCResult, ledger []LedgerEntry) Diff {
 	}
 	diff.Matched = len(res.Transactions) - len(diff.Missing)
 	return diff
-}
-
-func sameDay(a, b time.Time) bool {
-	ay, am, ad := a.Date()
-	by, bm, bd := b.Date()
-	return ay == by && am == bm && ad == bd
 }

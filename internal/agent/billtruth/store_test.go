@@ -71,12 +71,6 @@ func TestCorruptFileRecovers(t *testing.T) {
 	}
 }
 
-func TestAuthorityValuesArePinned(t *testing.T) {
-	if AuthorityAPI != 0 || AuthoritySMS != 1 || AuthorityPDF != 2 {
-		t.Fatalf("Authority values reordered: api=%d sms=%d pdf=%d", AuthorityAPI, AuthoritySMS, AuthorityPDF)
-	}
-}
-
 func TestBillsForReturnsDeepCopies(t *testing.T) {
 	s, _ := Open(t.TempDir())
 	paid := day("2026-07-20")

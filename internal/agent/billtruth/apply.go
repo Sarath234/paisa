@@ -4,6 +4,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/ananthakumaran/paisa/internal/truthcompare"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -141,11 +143,7 @@ func (s *Store) findBillLocked(f Facts) *Bill {
 	}
 	for i := range bills {
 		b := &bills[i]
-		diff := b.PeriodEnd.Sub(*f.PeriodEnd)
-		if diff < 0 {
-			diff = -diff
-		}
-		if diff <= samePeriodDays*24*time.Hour {
+		if truthcompare.WithinWindow(b.PeriodEnd, *f.PeriodEnd, samePeriodDays*24*time.Hour) {
 			return b
 		}
 	}
