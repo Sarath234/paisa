@@ -98,10 +98,21 @@ func (m *CCDueMonitor) Check(ctx context.Context) ([]Insight, error) {
 	return insights, nil
 }
 
+// telegramCallbackDataMaxLen is Telegram Bot API's hard limit on callback_data
+// length. Exceeding it makes Telegram reject the whole sendMessage call, so
+// ccDueButtons degrades to no buttons (plain-text insight) rather than
+// silently losing the entire reminder forever.
+const telegramCallbackDataMaxLen = 64
+
 func ccDueButtons(account, dueDate string) [][]telegram.Button {
+	paidData := fmt.Sprintf("ccdue_paid:%s:%s", account, dueDate)
+	remindData := fmt.Sprintf("ccdue_remind:%s:%s", account, dueDate)
+	if len(paidData) > telegramCallbackDataMaxLen || len(remindData) > telegramCallbackDataMaxLen {
+		return nil
+	}
 	return [][]telegram.Button{{
-		{Text: "✅ Paid", CallbackData: fmt.Sprintf("ccdue_paid:%s:%s", account, dueDate)},
-		{Text: "⏰ Remind later", CallbackData: fmt.Sprintf("ccdue_remind:%s:%s", account, dueDate)},
+		{Text: "✅ Paid", CallbackData: paidData},
+		{Text: "⏰ Remind later", CallbackData: remindData},
 	}}
 }
 

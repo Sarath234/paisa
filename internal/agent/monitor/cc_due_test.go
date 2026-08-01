@@ -343,6 +343,36 @@ func TestCCDueOverdueRecursDaily(t *testing.T) {
 	}
 }
 
+// TestCCDueDegradesToPlainTextWhenCallbackDataTooLong guards against Telegram
+// silently rejecting the entire sendMessage call when callback_data exceeds
+// its 64-byte hard limit: since Notifier.Deliver's error path never calls
+// MarkSent, an oversized callback_data would otherwise make that bill's
+// reminder retry and fail identically forever, with no reminder ever
+// reaching the user. ccDueButtons must degrade to nil buttons (plain text)
+// rather than emit an oversized callback_data.
+func TestCCDueDegradesToPlainTextWhenCallbackDataTooLong(t *testing.T) {
+	account := "Liabilities:CreditCard:AVeryLongCardNicknameThatExceedsTheLimit1234"
+	s := truthStore(t, billtruth.Bill{
+		Account: account, PeriodEnd: day("2026-07-10"),
+		DueDate: day("2026-07-30"), TotalDue: 23450.50,
+	})
+	m := NewCCDue(s, []int{3, 1, 0}, 8)
+	m.Now = func() time.Time { return day("2026-07-27").Add(8 * time.Hour) }
+	insights, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(insights) != 1 || insights[0].Key != "cc-due/"+account+"/2026-07-30/d-3" {
+		t.Fatalf("want the insight still emitted with the expected key, got %+v", insights)
+	}
+	if !strings.Contains(insights[0].Title, "₹23450.50") {
+		t.Errorf("insight must still carry the normal title: %q", insights[0].Title)
+	}
+	if insights[0].Buttons != nil {
+		t.Fatalf("want nil buttons (plain text) when callback_data would exceed Telegram's 64-byte limit, got %+v", insights[0].Buttons)
+	}
+}
+
 func TestCCDueInsightsHaveButtons(t *testing.T) {
 	s := truthStore(t, billtruth.Bill{
 		Account: "Liabilities:CreditCard:ICIC6009", PeriodEnd: day("2026-07-10"),
