@@ -216,7 +216,7 @@ func TestCCDueEmitsSmallestApplicableOffset(t *testing.T) {
 		{"2026-07-21", "cc-due/Liabilities:CreditCard:Axis/2026-07-28/d-7", "in 7 days"},
 		{"2026-07-26", "cc-due/Liabilities:CreditCard:Axis/2026-07-28/d-3", "in 2 days"}, // missed d-3 window self-heals
 		{"2026-07-28", "cc-due/Liabilities:CreditCard:Axis/2026-07-28/d-0", "today"},
-		{"2026-07-30", "cc-due/Liabilities:CreditCard:Axis/2026-07-28/overdue", "overdue"},
+		{"2026-07-30", "cc-due/Liabilities:CreditCard:Axis/2026-07-28/overdue/2026-07-30", "overdue"},
 	}
 	for _, c := range cases {
 		m.Now = func() time.Time { return day(c.today).Add(8 * time.Hour) }
@@ -295,5 +295,78 @@ func TestCCDueEmitsForMultipleUnpaidBills(t *testing.T) {
 	}
 	if !gotOverdue || !gotD3 {
 		t.Fatalf("expected both overdue and d-3 insights: %+v", insights)
+	}
+}
+
+func TestCCDueSkipsUserPaidBill(t *testing.T) {
+	s := truthStore(t, billtruth.Bill{
+		Account: "Liabilities:CreditCard:ICIC6009", PeriodEnd: day("2026-07-10"),
+		DueDate: day("2026-07-30"), TotalDue: 23450.50,
+	})
+	if err := s.SetUserPaid("Liabilities:CreditCard:ICIC6009", day("2026-07-30")); err != nil {
+		t.Fatal(err)
+	}
+	m := NewCCDue(s, []int{3, 1, 0}, 8)
+	m.Now = func() time.Time { return day("2026-07-28").Add(8 * time.Hour) }
+	insights, _ := m.Check(context.Background())
+	if len(insights) != 0 {
+		t.Fatalf("self-reported-paid bill must be silent: %+v", insights)
+	}
+}
+
+func TestCCDueOverdueRecursDaily(t *testing.T) {
+	s := truthStore(t, billtruth.Bill{
+		Account: "Liabilities:CreditCard:Axis", PeriodEnd: day("2026-07-15"),
+		DueDate: day("2026-07-28"), TotalDue: 900,
+	})
+	m := NewCCDue(s, []int{3, 1, 0}, 8)
+
+	m.Now = func() time.Time { return day("2026-07-30").Add(8 * time.Hour) }
+	day1, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Now = func() time.Time { return day("2026-07-31").Add(8 * time.Hour) }
+	day2, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(day1) != 1 || len(day2) != 1 {
+		t.Fatalf("want 1 overdue insight per day, got %d and %d", len(day1), len(day2))
+	}
+	if day1[0].Key == day2[0].Key {
+		t.Fatalf("overdue key must change day-to-day so it recurs: %q", day1[0].Key)
+	}
+	if !strings.Contains(day1[0].Key, "overdue/2026-07-30") || !strings.Contains(day2[0].Key, "overdue/2026-07-31") {
+		t.Fatalf("keys: %q, %q", day1[0].Key, day2[0].Key)
+	}
+}
+
+func TestCCDueInsightsHaveButtons(t *testing.T) {
+	s := truthStore(t, billtruth.Bill{
+		Account: "Liabilities:CreditCard:ICIC6009", PeriodEnd: day("2026-07-10"),
+		DueDate: day("2026-07-30"), TotalDue: 23450.50,
+	})
+	m := NewCCDue(s, []int{3, 1, 0}, 8)
+	m.Now = func() time.Time { return day("2026-07-27").Add(8 * time.Hour) }
+	insights, err := m.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(insights) != 1 {
+		t.Fatalf("%+v", insights)
+	}
+	buttons := insights[0].Buttons
+	if len(buttons) != 1 || len(buttons[0]) != 2 {
+		t.Fatalf("want 1 row of 2 buttons, got %+v", buttons)
+	}
+	wantPaid := "ccdue_paid:Liabilities:CreditCard:ICIC6009:2026-07-30"
+	wantRemind := "ccdue_remind:Liabilities:CreditCard:ICIC6009:2026-07-30"
+	if buttons[0][0].CallbackData != wantPaid {
+		t.Errorf("paid button: got %q, want %q", buttons[0][0].CallbackData, wantPaid)
+	}
+	if buttons[0][1].CallbackData != wantRemind {
+		t.Errorf("remind button: got %q, want %q", buttons[0][1].CallbackData, wantRemind)
 	}
 }

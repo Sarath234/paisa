@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/agent/paisaclient"
+	"github.com/ananthakumaran/paisa/internal/agent/telegram"
 )
 
 // CreditCardFetcher is the slice of paisaclient the credit-card monitors need.
@@ -45,7 +46,7 @@ func (m *CCDueMonitor) Check(ctx context.Context) ([]Insight, error) {
 	var insights []Insight
 	for _, account := range m.bills.Accounts() {
 		for _, bill := range m.bills.BillsFor(account) {
-			if bill.PaidDate != nil || bill.DueDate.IsZero() || bill.TotalDue <= 0 {
+			if bill.PaidDate != nil || bill.UserPaidDate != nil || bill.DueDate.IsZero() || bill.TotalDue <= 0 {
 				continue
 			}
 			if !today.After(DateOnly(bill.PeriodEnd)) {
@@ -67,10 +68,11 @@ func (m *CCDueMonitor) Check(ctx context.Context) ([]Insight, error) {
 			dueDate := bill.DueDate.Format("2006-01-02")
 			if days < 0 {
 				insights = append(insights, Insight{
-					Key:     fmt.Sprintf("cc-due/%s/%s/overdue", account, dueDate),
+					Key:     fmt.Sprintf("cc-due/%s/%s/overdue/%s", account, dueDate, today.Format("2006-01-02")),
 					Urgency: Immediate,
 					Title: fmt.Sprintf("🚨 %s on %s is overdue (was due %s)",
 						INR(bill.TotalDue), Short(account), bill.DueDate.Format("02 Jan")),
+					Buttons: ccDueButtons(account, dueDate),
 				})
 				continue
 			}
@@ -89,10 +91,18 @@ func (m *CCDueMonitor) Check(ctx context.Context) ([]Insight, error) {
 				Urgency: Immediate,
 				Title: fmt.Sprintf("💳 %s due on %s %s (%s)",
 					INR(bill.TotalDue), Short(account), inDays(days), bill.DueDate.Format("02 Jan")),
+				Buttons: ccDueButtons(account, dueDate),
 			})
 		}
 	}
 	return insights, nil
+}
+
+func ccDueButtons(account, dueDate string) [][]telegram.Button {
+	return [][]telegram.Button{{
+		{Text: "✅ Paid", CallbackData: fmt.Sprintf("ccdue_paid:%s:%s", account, dueDate)},
+		{Text: "⏰ Remind later", CallbackData: fmt.Sprintf("ccdue_remind:%s:%s", account, dueDate)},
+	}}
 }
 
 func inDays(days int) string {
