@@ -246,7 +246,7 @@ func main() {
 		for _, u := range updates {
 			switch {
 			case u.CallbackQuery != nil:
-				handleCallback(u.CallbackQuery, bot, store, ruleStore, ccreconDeps, cfg, *cfgPath, pc)
+				handleCallback(u.CallbackQuery, bot, store, ruleStore, ccreconDeps, cfg, *cfgPath, pc, truthStore)
 			case u.Message != nil:
 				if u.Message.Chat.ID != cfg.Telegram.ChatID {
 					continue
@@ -288,6 +288,7 @@ func handleCallback(
 	cfg *config.Config,
 	cfgPath string,
 	pc *paisaclient.Client,
+	truthStore *billtruth.Store,
 ) {
 	bot.AnswerCallback(cb.ID)
 
@@ -304,6 +305,11 @@ func handleCallback(
 		if err != nil {
 			log.Errorf("ccrecon: handle callback %q: %v", data, err)
 		}
+		return
+	}
+
+	if strings.HasPrefix(cb.Data, "ccdue_paid:") || strings.HasPrefix(cb.Data, "ccdue_remind:") {
+		handleCCDueCallback(cb, bot, truthStore)
 		return
 	}
 
