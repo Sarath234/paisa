@@ -30,7 +30,5 @@ brand/*.png
 .superpowers/
 appreview.md
 /paisa-agent
-docs/superpowers/plans/
-docs/superpowers/specs/
 local_deploy.sh
 .claude/
