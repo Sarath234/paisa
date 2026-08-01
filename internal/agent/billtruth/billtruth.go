@@ -27,6 +27,7 @@ type Bill struct {
 	TotalDue      float64              `json:"totalDue"`
 	MinDue        float64              `json:"minDue"`
 	PaidDate      *time.Time           `json:"paidDate"`
+	UserPaidDate  *time.Time           `json:"userPaidDate"` // self-reported via Telegram; never bank-confirmed, no Sources/Authority entry
 	PaidAmount    float64              `json:"paidAmount"`
 	InterestTotal float64              `json:"interestTotal"`
 	Sources       map[string]Authority `json:"sources"`

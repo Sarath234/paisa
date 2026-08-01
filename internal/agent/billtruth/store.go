@@ -3,6 +3,7 @@ package billtruth
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -97,6 +98,10 @@ func (s *Store) BillsFor(account string) []Bill {
 			paid := *b.PaidDate
 			b.PaidDate = &paid
 		}
+		if b.UserPaidDate != nil {
+			userPaid := *b.UserPaidDate
+			b.UserPaidDate = &userPaid
+		}
 		out[i] = b
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].PeriodEnd.After(out[j].PeriodEnd) })
@@ -113,6 +118,71 @@ func (s *Store) Accounts() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// findBillByDateLocked returns a pointer into the store's internal slice for the
+// account's bill whose DueDate falls on the same calendar day as dueDate,
+// or nil. Unlike BillsFor, this is NOT a deep copy — it exists so
+// SetUserPaid can mutate in place under the lock; do not use it to hand a
+// bill out past the lock.
+func (s *Store) findBillByDateLocked(account string, dueDate time.Time) *Bill {
+	bills := s.bills[account]
+	for i := range bills {
+		by, bm, bd := bills[i].DueDate.Date()
+		dy, dm, dd := dueDate.Date()
+		if by == dy && bm == dm && bd == dd {
+			return &bills[i]
+		}
+	}
+	return nil
+}
+
+// FindBill returns a deep-copied snapshot of the account's bill whose
+// DueDate falls on the same calendar day as dueDate, or nil. Used by the
+// Telegram callback handler, which only has account+dueDate (round-tripped
+// through callback_data), not the full Bill.
+func (s *Store) FindBill(account string, dueDate time.Time) *Bill {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b := s.findBillByDateLocked(account, dueDate)
+	if b == nil {
+		return nil
+	}
+	cp := *b
+	if b.UserPaidDate != nil {
+		userPaid := *b.UserPaidDate
+		cp.UserPaidDate = &userPaid
+	}
+	if b.PaidDate != nil {
+		paid := *b.PaidDate
+		cp.PaidDate = &paid
+	}
+	if b.Sources != nil {
+		sources := make(map[string]Authority, len(b.Sources))
+		for k, v := range b.Sources {
+			sources[k] = v
+		}
+		cp.Sources = sources
+	}
+	return &cp
+}
+
+// SetUserPaid marks the account's bill (matched by calendar-day DueDate)
+// self-reported-paid (UserPaidDate = now) and saves. Returns an error if no
+// matching bill exists (e.g. a stale button tapped after the due date
+// shifted or bill-truth.json was reset).
+func (s *Store) SetUserPaid(account string, dueDate time.Time) error {
+	s.mu.Lock()
+	b := s.findBillByDateLocked(account, dueDate)
+	if b == nil {
+		s.mu.Unlock()
+		return fmt.Errorf("billtruth: no bill for %s due %s", account, dueDate.Format("2006-01-02"))
+	}
+	now := s.Now()
+	b.UserPaidDate = &now
+	err := s.saveLocked()
+	s.mu.Unlock()
+	return err
 }
 
 // putForTest inserts a bill without merge logic. Test helper.

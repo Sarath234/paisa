@@ -130,3 +130,88 @@ func TestSavePrunesTo12CyclesPerCard(t *testing.T) {
 		t.Error("prune removed the newest bill")
 	}
 }
+
+func TestSetUserPaidThenFindBill(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := Open(dir)
+	s.putForTest(Bill{
+		Account:  "Liabilities:CreditCard:ICIC6009",
+		DueDate:  day("2026-07-30"),
+		TotalDue: 23450.50,
+	})
+
+	beforeSet := time.Now()
+	if err := s.SetUserPaid("Liabilities:CreditCard:ICIC6009", day("2026-07-30")); err != nil {
+		t.Fatal(err)
+	}
+	afterSet := time.Now()
+
+	bill := s.FindBill("Liabilities:CreditCard:ICIC6009", day("2026-07-30"))
+	if bill == nil {
+		t.Fatal("want bill, got nil")
+	}
+	if bill.UserPaidDate == nil {
+		t.Fatal("want UserPaidDate set")
+	}
+	// Verify UserPaidDate is approximately now (within the window between beforeSet and afterSet)
+	if bill.UserPaidDate.Before(beforeSet) || bill.UserPaidDate.After(afterSet) {
+		t.Errorf("UserPaidDate = %v, want within [%v, %v]", bill.UserPaidDate, beforeSet, afterSet)
+	}
+}
+
+func TestSetUserPaidPersistsAcrossReload(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := Open(dir)
+	s.putForTest(Bill{Account: "Liabilities:CreditCard:ICIC6009", DueDate: day("2026-07-30")})
+	if err := s.SetUserPaid("Liabilities:CreditCard:ICIC6009", day("2026-07-30")); err != nil {
+		t.Fatal(err)
+	}
+
+	s2, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bill := s2.FindBill("Liabilities:CreditCard:ICIC6009", day("2026-07-30"))
+	if bill == nil || bill.UserPaidDate == nil {
+		t.Fatalf("UserPaidDate lost on reload: %+v", bill)
+	}
+}
+
+func TestSetUserPaidNoMatchingBillErrors(t *testing.T) {
+	s, _ := Open(t.TempDir())
+	err := s.SetUserPaid("Liabilities:CreditCard:ICIC6009", day("2026-07-30"))
+	if err == nil {
+		t.Fatal("want error for no matching bill")
+	}
+}
+
+func TestFindBillNoMatchReturnsNil(t *testing.T) {
+	s, _ := Open(t.TempDir())
+	s.putForTest(Bill{Account: "Liabilities:CreditCard:ICIC6009", DueDate: day("2026-07-30")})
+	if got := s.FindBill("Liabilities:CreditCard:ICIC6009", day("2026-08-30")); got != nil {
+		t.Fatalf("want nil for non-matching due date, got %+v", got)
+	}
+	if got := s.FindBill("Liabilities:CreditCard:OTHER", day("2026-07-30")); got != nil {
+		t.Fatalf("want nil for non-matching account, got %+v", got)
+	}
+}
+
+// TestBillsForReturnsDeepCopiesIncludingUserPaidDate extends the existing
+// TestBillsForReturnsDeepCopies to cover the new pointer field — mutating a
+// returned bill's UserPaidDate must never leak into the store.
+func TestBillsForReturnsDeepCopiesIncludingUserPaidDate(t *testing.T) {
+	s, _ := Open(t.TempDir())
+	paid := day("2026-07-30")
+	s.putForTest(Bill{
+		Account:      "Liabilities:CreditCard:ICIC6009",
+		UserPaidDate: &paid,
+	})
+
+	got := s.BillsFor("Liabilities:CreditCard:ICIC6009")
+	*got[0].UserPaidDate = day("1999-01-01")
+
+	fresh := s.BillsFor("Liabilities:CreditCard:ICIC6009")
+	if !fresh[0].UserPaidDate.Equal(day("2026-07-30")) {
+		t.Errorf("mutating returned *UserPaidDate leaked into store: %v", fresh[0].UserPaidDate)
+	}
+}
