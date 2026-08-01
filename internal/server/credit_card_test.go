@@ -195,6 +195,25 @@ func TestApplyTruthSelfReportedSetsStatusFromUserPaidDate(t *testing.T) {
 	}
 }
 
+func TestApplyTruthSelfReportedDoesNotOverwriteComputedPaidDateOrChannel(t *testing.T) {
+	u := time.Date(2026, 7, 29, 10, 0, 0, 0, time.UTC)
+	computedPaidDate := time.Date(2026, 7, 28, 0, 0, 0, 0, time.UTC)
+	bill := &CreditCardBill{DueDate: time.Now(), ClosingBalance: decimal.NewFromInt(100), PaidDate: &computedPaidDate}
+	truth := &truthBill{DueDate: bill.DueDate, TotalDue: 100, UserPaidDate: &u}
+
+	applyTruth(bill, truth)
+
+	if bill.PaidDateStatus != "self_reported" {
+		t.Fatalf("want self_reported, got %s", bill.PaidDateStatus)
+	}
+	if bill.PaidDate == nil || !bill.PaidDate.Equal(computedPaidDate) {
+		t.Fatalf("want bill.PaidDate left as the originally computed value %+v, got %+v", computedPaidDate, bill.PaidDate)
+	}
+	if bill.PaidDateChannel != nil {
+		t.Fatalf("want no channel attributed for a self-report with no bank confirmation, got %+v", *bill.PaidDateChannel)
+	}
+}
+
 func TestChannelLabelPdfWhenAuthorityAtLeastPdf(t *testing.T) {
 	if got := channelLabel(authorityPDF); got != "pdf" {
 		t.Fatalf("want pdf, got %s", got)

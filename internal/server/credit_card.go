@@ -162,7 +162,15 @@ func applyTruth(bill *CreditCardBill, truth *truthBill) {
 
 	paidAuthority := truth.Sources["paid_date"]
 	bill.PaidDateStatus = paidDateStatus(paidAuthority, bill.PaidDate, truth.PaidDate, truth.UserPaidDate)
-	if bill.PaidDateStatus != "computed" {
+	switch bill.PaidDateStatus {
+	case "computed", "self_reported":
+		// self_reported sets only the status badge — there's no bank
+		// channel/authority to attribute (truth.Sources has no "paid_date"
+		// entry for a self-report), and truth.PaidDate is nil in this case,
+		// so leave bill.PaidDate/PaidDateChannel exactly as computeBills
+		// already set them rather than nulling PaidDate or mislabeling the
+		// channel as "sms".
+	default: // "confirmed" or "corrected"
 		channel := channelLabel(paidAuthority)
 		bill.PaidDateChannel = &channel
 		if bill.PaidDateStatus == "corrected" {
