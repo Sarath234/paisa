@@ -1,4 +1,4 @@
-export type TruthStatus = "computed" | "confirmed" | "corrected";
+export type TruthStatus = "computed" | "confirmed" | "corrected" | "self_reported";
 export type TruthChannel = "sms" | "pdf";
 
 export function channelLabel(channel: TruthChannel | undefined): string {
@@ -6,9 +6,13 @@ export function channelLabel(channel: TruthChannel | undefined): string {
 }
 
 export function badgeClass(status: TruthStatus): string {
-  return status === "corrected" ? "is-warning is-light" : "is-success is-light";
+  if (status === "corrected") return "is-warning is-light";
+  if (status === "self_reported") return "is-info is-light";
+  return "is-success is-light";
 }
 
 export function badgeIcon(status: TruthStatus): string {
-  return status === "corrected" ? "fa-pen" : "fa-check";
+  if (status === "corrected") return "fa-pen";
+  if (status === "self_reported") return "fa-user-check";
+  return "fa-check";
 }

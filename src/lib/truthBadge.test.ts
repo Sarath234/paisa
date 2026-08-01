@@ -20,4 +20,12 @@ describe("truthBadge", () => {
     expect(badgeIcon("corrected")).toBe("fa-pen");
     expect(badgeIcon("confirmed")).toBe("fa-check");
   });
+
+  test("badgeClass is info for self_reported", () => {
+    expect(badgeClass("self_reported")).toBe("is-info is-light");
+  });
+
+  test("badgeIcon is a user-check icon for self_reported", () => {
+    expect(badgeIcon("self_reported")).toBe("fa-user-check");
+  });
 });
