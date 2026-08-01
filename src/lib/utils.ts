@@ -526,6 +526,7 @@ export interface CreditCardBill {
   paidDateChannel?: TruthChannel;
   computedPaidDate?: dayjs.Dayjs;
   truthPaidDate?: dayjs.Dayjs;
+  userPaidDate?: dayjs.Dayjs;
 }
 
 export interface CreditCardSummary {

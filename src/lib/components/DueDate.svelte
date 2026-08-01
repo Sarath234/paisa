@@ -28,7 +28,9 @@
       ? `Marked paid via ${channelLabel(activeChannel)} (ledger showed ${
           computedPaidDate ? "paid " + computedPaidDate.format("DD MMM") : "still unpaid"
         })`
-      : `Confirmed via ${channelLabel(activeChannel)}`
+      : activeStatus === "self_reported"
+        ? `Marked paid via Telegram (unconfirmed by bank)`
+        : `Confirmed via ${channelLabel(activeChannel)}`
     : activeStatus === "corrected"
       ? `Due date corrected to ${truthDueDate?.format("DD MMM")} via ${channelLabel(
           activeChannel
