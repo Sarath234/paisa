@@ -96,6 +96,7 @@
             paidDateStatus={bill.paidDateStatus}
             paidDateChannel={bill.paidDateChannel}
             computedPaidDate={bill.computedPaidDate}
+            userPaidDate={bill.userPaidDate}
           />
         </div>
       {/if}

@@ -214,6 +214,36 @@ func TestApplyTruthSelfReportedDoesNotOverwriteComputedPaidDateOrChannel(t *test
 	}
 }
 
+func TestApplyTruthSetsUserPaidDateFromTruthWithoutTouchingPaidDateOrChannel(t *testing.T) {
+	u := time.Date(2026, 7, 29, 10, 0, 0, 0, time.UTC)
+	computedPaidDate := time.Date(2026, 7, 28, 0, 0, 0, 0, time.UTC)
+	bill := &CreditCardBill{DueDate: time.Now(), ClosingBalance: decimal.NewFromInt(100), PaidDate: &computedPaidDate}
+	truth := &truthBill{DueDate: bill.DueDate, TotalDue: 100, UserPaidDate: &u}
+
+	applyTruth(bill, truth)
+
+	if bill.UserPaidDate == nil || !bill.UserPaidDate.Equal(u) {
+		t.Fatalf("want bill.UserPaidDate propagated from truth.UserPaidDate %+v, got %+v", u, bill.UserPaidDate)
+	}
+	if bill.PaidDate == nil || !bill.PaidDate.Equal(computedPaidDate) {
+		t.Fatalf("want bill.PaidDate left as the originally computed value %+v, got %+v", computedPaidDate, bill.PaidDate)
+	}
+	if bill.PaidDateChannel != nil {
+		t.Fatalf("want no channel attributed for a self-report with no bank confirmation, got %+v", *bill.PaidDateChannel)
+	}
+}
+
+func TestApplyTruthNilUserPaidDateLeavesBillUserPaidDateNil(t *testing.T) {
+	bill := &CreditCardBill{DueDate: time.Now(), ClosingBalance: decimal.NewFromInt(100)}
+	truth := &truthBill{DueDate: bill.DueDate, TotalDue: 100}
+
+	applyTruth(bill, truth)
+
+	if bill.UserPaidDate != nil {
+		t.Fatalf("want bill.UserPaidDate nil when truth.UserPaidDate is nil, got %+v", *bill.UserPaidDate)
+	}
+}
+
 func TestChannelLabelPdfWhenAuthorityAtLeastPdf(t *testing.T) {
 	if got := channelLabel(authorityPDF); got != "pdf" {
 		t.Fatalf("want pdf, got %s", got)

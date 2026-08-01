@@ -59,6 +59,7 @@ type CreditCardBill struct {
 	PaidDateChannel  *string    `json:"paidDateChannel,omitempty"`
 	ComputedPaidDate *time.Time `json:"computedPaidDate,omitempty"`
 	TruthPaidDate    *time.Time `json:"truthPaidDate,omitempty"`
+	UserPaidDate     *time.Time `json:"userPaidDate,omitempty"`
 }
 
 // truthBill is a local decode struct for one entry in bill-truth.json,
@@ -158,6 +159,10 @@ func applyTruth(bill *CreditCardBill, truth *truthBill) {
 			bill.ComputedClosingBalance, bill.TruthClosingBalance = &computed, &truthAmt
 		}
 		bill.ClosingBalance = truthAmt
+	}
+
+	if truth.UserPaidDate != nil {
+		bill.UserPaidDate = truth.UserPaidDate
 	}
 
 	paidAuthority := truth.Sources["paid_date"]

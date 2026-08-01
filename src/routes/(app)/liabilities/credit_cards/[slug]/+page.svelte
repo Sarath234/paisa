@@ -126,6 +126,7 @@
                       paidDateStatus={currentBill.paidDateStatus}
                       paidDateChannel={currentBill.paidDateChannel}
                       computedPaidDate={currentBill.computedPaidDate}
+                      userPaidDate={currentBill.userPaidDate}
                     /></span
                   >
                 </div>

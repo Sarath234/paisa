@@ -18,24 +18,26 @@
   export let paidDateStatus: TruthStatus = "computed";
   export let paidDateChannel: TruthChannel | undefined = undefined;
   export let computedPaidDate: dayjs.Dayjs | undefined = undefined;
+  export let userPaidDate: dayjs.Dayjs | undefined = undefined;
 
-  $: icon = dueDateIcon(dueDate, paidDate);
+  $: icon = dueDateIcon(dueDate, paidDate || userPaidDate);
 
-  $: activeStatus = paidDate ? paidDateStatus : dueDateStatus;
-  $: activeChannel = paidDate ? paidDateChannel : dueDateChannel;
-  $: tooltip = paidDate
-    ? activeStatus === "corrected"
-      ? `Marked paid via ${channelLabel(activeChannel)} (ledger showed ${
-          computedPaidDate ? "paid " + computedPaidDate.format("DD MMM") : "still unpaid"
-        })`
-      : activeStatus === "self_reported"
-        ? `Marked paid via Telegram (unconfirmed by bank)`
-        : `Confirmed via ${channelLabel(activeChannel)}`
-    : activeStatus === "corrected"
-      ? `Due date corrected to ${truthDueDate?.format("DD MMM")} via ${channelLabel(
-          activeChannel
-        )} (computed: ${computedDueDate?.format("DD MMM")})`
-      : `Confirmed via ${channelLabel(activeChannel)}`;
+  $: activeStatus = paidDate || userPaidDate ? paidDateStatus : dueDateStatus;
+  $: activeChannel = paidDate || userPaidDate ? paidDateChannel : dueDateChannel;
+  $: tooltip =
+    paidDate || userPaidDate
+      ? activeStatus === "corrected"
+        ? `Marked paid via ${channelLabel(activeChannel)} (ledger showed ${
+            computedPaidDate ? "paid " + computedPaidDate.format("DD MMM") : "still unpaid"
+          })`
+        : activeStatus === "self_reported"
+          ? `Marked paid via Telegram (unconfirmed by bank)`
+          : `Confirmed via ${channelLabel(activeChannel)}`
+      : activeStatus === "corrected"
+        ? `Due date corrected to ${truthDueDate?.format("DD MMM")} via ${channelLabel(
+            activeChannel
+          )} (computed: ${computedDueDate?.format("DD MMM")})`
+        : `Confirmed via ${channelLabel(activeChannel)}`;
 </script>
 
 <span title="due on {dueDate.format('DD MMM YYYY')}">
@@ -44,6 +46,8 @@
   </span>
   {#if paidDate}
     <span>paid on {paidDate.format("DD MMM YYYY")}</span>
+  {:else if userPaidDate}
+    <span>marked paid via Telegram</span>
   {:else}
     <span>due {dueDate.fromNow()}</span>
   {/if}
