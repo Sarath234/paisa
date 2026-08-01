@@ -133,7 +133,7 @@ func TestAmountFieldStatusComputedWhenAuthorityIsAPI(t *testing.T) {
 }
 
 func TestPaidDateStatusBothNilIsConfirmed(t *testing.T) {
-	got := paidDateStatus(authoritySMS, nil, nil)
+	got := paidDateStatus(authoritySMS, nil, nil, nil)
 	if got != "confirmed" {
 		t.Fatalf("want confirmed, got %s", got)
 	}
@@ -141,7 +141,7 @@ func TestPaidDateStatusBothNilIsConfirmed(t *testing.T) {
 
 func TestPaidDateStatusNilVsSetIsCorrected(t *testing.T) {
 	d := time.Date(2026, 7, 25, 0, 0, 0, 0, time.UTC)
-	got := paidDateStatus(authoritySMS, nil, &d)
+	got := paidDateStatus(authoritySMS, nil, &d, nil)
 	if got != "corrected" {
 		t.Fatalf("want corrected, got %s", got)
 	}
@@ -150,9 +150,48 @@ func TestPaidDateStatusNilVsSetIsCorrected(t *testing.T) {
 func TestPaidDateStatusSameDayIsConfirmed(t *testing.T) {
 	a := time.Date(2026, 7, 25, 9, 0, 0, 0, time.UTC)
 	b := time.Date(2026, 7, 25, 23, 0, 0, 0, time.UTC)
-	got := paidDateStatus(authoritySMS, &a, &b)
+	got := paidDateStatus(authoritySMS, &a, &b, nil)
 	if got != "confirmed" {
 		t.Fatalf("want confirmed for same calendar day, got %s", got)
+	}
+}
+
+func TestPaidDateStatusSelfReportedWhenOnlyUserPaidSet(t *testing.T) {
+	u := time.Date(2026, 7, 29, 10, 0, 0, 0, time.UTC)
+	got := paidDateStatus(authoritySMS, nil, nil, &u)
+	if got != "self_reported" {
+		t.Fatalf("want self_reported, got %s", got)
+	}
+}
+
+func TestPaidDateStatusSelfReportedIgnoresAuthorityGate(t *testing.T) {
+	// authority 0 (below SMS) would normally force "computed" — but a
+	// self-reported mark has no bank authority at all, so it must still win.
+	u := time.Date(2026, 7, 29, 10, 0, 0, 0, time.UTC)
+	got := paidDateStatus(0, nil, nil, &u)
+	if got != "self_reported" {
+		t.Fatalf("want self_reported even at authority 0, got %s", got)
+	}
+}
+
+func TestPaidDateStatusBankConfirmationOverridesSelfReported(t *testing.T) {
+	u := time.Date(2026, 7, 29, 10, 0, 0, 0, time.UTC)
+	truth := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC)
+	got := paidDateStatus(authoritySMS, nil, &truth, &u)
+	if got != "corrected" {
+		t.Fatalf("bank confirmation must override self-reported, got %s", got)
+	}
+}
+
+func TestApplyTruthSelfReportedSetsStatusFromUserPaidDate(t *testing.T) {
+	u := time.Date(2026, 7, 29, 10, 0, 0, 0, time.UTC)
+	bill := &CreditCardBill{DueDate: time.Now(), ClosingBalance: decimal.NewFromInt(100)}
+	truth := &truthBill{DueDate: bill.DueDate, TotalDue: 100, UserPaidDate: &u}
+
+	applyTruth(bill, truth)
+
+	if bill.PaidDateStatus != "self_reported" {
+		t.Fatalf("want self_reported, got %s", bill.PaidDateStatus)
 	}
 }
 

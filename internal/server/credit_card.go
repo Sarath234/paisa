@@ -66,11 +66,12 @@ type CreditCardBill struct {
 // NOT importing that package — core paisa stays decoupled from agent
 // internals, matching doctor.go's reconciliation.json pattern exactly.
 type truthBill struct {
-	PeriodEnd time.Time      `json:"periodEnd"`
-	DueDate   time.Time      `json:"dueDate"`
-	TotalDue  float64        `json:"totalDue"`
-	PaidDate  *time.Time     `json:"paidDate"`
-	Sources   map[string]int `json:"sources"` // field name -> authority (0 api, 1 sms, 2 pdf)
+	PeriodEnd    time.Time      `json:"periodEnd"`
+	DueDate      time.Time      `json:"dueDate"`
+	TotalDue     float64        `json:"totalDue"`
+	PaidDate     *time.Time     `json:"paidDate"`
+	UserPaidDate *time.Time     `json:"userPaidDate"` // self-reported via Telegram; no Sources entry
+	Sources      map[string]int `json:"sources"`      // field name -> authority (0 api, 1 sms, 2 pdf)
 }
 
 // loadBillTruth reads bill-truth.json from journalDir and returns the
@@ -160,7 +161,7 @@ func applyTruth(bill *CreditCardBill, truth *truthBill) {
 	}
 
 	paidAuthority := truth.Sources["paid_date"]
-	bill.PaidDateStatus = paidDateStatus(paidAuthority, bill.PaidDate, truth.PaidDate)
+	bill.PaidDateStatus = paidDateStatus(paidAuthority, bill.PaidDate, truth.PaidDate, truth.UserPaidDate)
 	if bill.PaidDateStatus != "computed" {
 		channel := channelLabel(paidAuthority)
 		bill.PaidDateChannel = &channel
@@ -199,9 +200,16 @@ func amountFieldStatus(authority int, computed decimal.Decimal, truthAmount floa
 	return "confirmed"
 }
 
-// paidDateStatus: presence/absence mismatch (nil vs set) is itself
-// "corrected" — that's the whole point of forwarding a payment SMS/PDF.
-func paidDateStatus(authority int, computedPaidDate, truthPaidDate *time.Time) string {
+// paidDateStatus: a self-reported (Telegram) paid mark with no bank
+// confirmation yet is "self_reported" — checked before the authority gate,
+// since self-reporting has no SMS/PDF authority at all. A real bank
+// confirmation (truthPaidDate set) always takes priority once it arrives:
+// presence/absence mismatch (nil vs set) is itself "corrected" — that's the
+// whole point of forwarding a payment SMS/PDF.
+func paidDateStatus(authority int, computedPaidDate, truthPaidDate, userPaidDate *time.Time) string {
+	if truthPaidDate == nil && userPaidDate != nil {
+		return "self_reported"
+	}
 	if authority < authoritySMS {
 		return "computed"
 	}
