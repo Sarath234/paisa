@@ -108,7 +108,8 @@ func (b *Bot) Poll() ([]Update, error) {
 }
 
 // draftButtons is the approval draft's inline keyboard: ✅ Approve / ✏️ Edit / ⏭ Skip
-// on the first row, with 🍔 Food / 🛒 Groceries quick-category shortcuts on the second.
+// on the first row, with 🍔 Food / 🛒 Groceries / 🚕 Commute / 💡 Util quick-category
+// shortcuts on the rows below.
 func draftButtons() [][]inlineButton {
 	return [][]inlineButton{
 		{
@@ -120,11 +121,15 @@ func draftButtons() [][]inlineButton {
 			{Text: "🍔 Food", CallbackData: "food"},
 			{Text: "🛒 Groceries", CallbackData: "groceries"},
 		},
+		{
+			{Text: "🚕 Commute", CallbackData: "commute"},
+			{Text: "💡 Util", CallbackData: "util"},
+		},
 	}
 }
 
 // SendDraft sends the approval draft with ✅ Approve / ✏️ Edit / ⏭ Skip buttons,
-// plus 🍔 Food / 🛒 Groceries shortcuts to quickly set dest.
+// plus 🍔 Food / 🛒 Groceries / 🚕 Commute / 💡 Util shortcuts to quickly set dest.
 // Returns the sent message's ID for later editing.
 func (b *Bot) SendDraft(text string) (int, error) {
 	return b.sendWithKeyboard(text, draftButtons())
@@ -206,8 +211,8 @@ func (b *Bot) EditMessage(messageID int, text string) error {
 }
 
 // EditDraft replaces the text of a pending draft message while keeping its
-// Approve/Edit/Skip/Food/Groceries keyboard active, so the user can still act
-// on it after a Food/Groceries dest shortcut is tapped.
+// Approve/Edit/Skip/Food/Groceries/Commute/Util keyboard active, so the user
+// can still act on it after a quick-category dest shortcut is tapped.
 func (b *Bot) EditDraft(messageID int, text string) error {
 	_, err := b.post("editMessageText", map[string]any{
 		"chat_id":      b.ChatID,

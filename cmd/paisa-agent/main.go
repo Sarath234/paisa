@@ -377,17 +377,19 @@ func handleCallback(
 		bot.EditMessage(msgID, "⏭ Skipped\n\n"+telegram.FormatDraft(pending.Entry))
 		store.Delete(msgID)
 
-	case "food", "groceries":
+	case "food", "groceries", "commute", "util":
 		pending := store.Get(msgID)
 		if pending == nil {
 			log.Debugf("callback for unknown messageID %d (agent may have restarted)", msgID)
 			return
 		}
-		if data == "food" {
-			pending.Entry.Dest = "Expenses:Food:Hyd"
-		} else {
-			pending.Entry.Dest = "Expenses:Groceries:Hyd"
+		quickCategoryDest := map[string]string{
+			"food":      "Expenses:Food:Hyd",
+			"groceries": "Expenses:Groceries:Hyd",
+			"commute":   "Expenses:Commute:Hyd",
+			"util":      "Expenses:Utils:Hyd",
 		}
+		pending.Entry.Dest = quickCategoryDest[data]
 		if err := bot.EditDraft(msgID, telegram.FormatDraft(pending.Entry)); err != nil {
 			log.Errorf("update draft dest to %q: %v", pending.Entry.Dest, err)
 		}
