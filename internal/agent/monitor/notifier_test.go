@@ -4,11 +4,19 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/ananthakumaran/paisa/internal/agent/telegram"
 )
 
+type buttonSend struct {
+	text    string
+	buttons [][]telegram.Button
+}
+
 type fakeSender struct {
-	sent []string
-	err  error
+	sent            []string
+	sentWithButtons []buttonSend
+	err             error
 }
 
 func (f *fakeSender) SendText(text string) error {
@@ -17,6 +25,14 @@ func (f *fakeSender) SendText(text string) error {
 	}
 	f.sent = append(f.sent, text)
 	return nil
+}
+
+func (f *fakeSender) SendTextWithButtons(text string, buttons [][]telegram.Button) (int, error) {
+	if f.err != nil {
+		return 0, f.err
+	}
+	f.sentWithButtons = append(f.sentWithButtons, buttonSend{text: text, buttons: buttons})
+	return 1, nil
 }
 
 func newTestStore(t *testing.T) *Store {
@@ -175,5 +191,31 @@ func TestFlushDigestSingularHeader(t *testing.T) {
 	}
 	if !strings.Contains(bot.sent[0], "1 insight\n") || strings.Contains(bot.sent[0], "1 insights") {
 		t.Errorf("digest header must pluralize correctly, got:\n%s", bot.sent[0])
+	}
+}
+
+func TestDeliverImmediateWithButtonsUsesSendTextWithButtons(t *testing.T) {
+	bot := &fakeSender{}
+	store := newTestStore(t)
+	n := NewNotifier(bot, store)
+
+	buttons := [][]telegram.Button{{
+		{Text: "✅ Paid", CallbackData: "ccdue_paid:Liabilities:CreditCard:ICIC6009:2026-07-30"},
+		{Text: "⏰ Remind later", CallbackData: "ccdue_remind:Liabilities:CreditCard:ICIC6009:2026-07-30"},
+	}}
+	in := Insight{Key: "k1", Urgency: Immediate, Title: "💳 due", Buttons: buttons}
+	n.Deliver("cc_due", []Insight{in})
+
+	if len(bot.sentWithButtons) != 1 {
+		t.Fatalf("want 1 buttoned send, got %d (plain sends: %d)", len(bot.sentWithButtons), len(bot.sent))
+	}
+	if bot.sentWithButtons[0].text != "💳 due" {
+		t.Errorf("text = %q", bot.sentWithButtons[0].text)
+	}
+	if len(bot.sentWithButtons[0].buttons) != 1 || bot.sentWithButtons[0].buttons[0][0].CallbackData != buttons[0][0].CallbackData {
+		t.Errorf("buttons not passed through: %+v", bot.sentWithButtons[0].buttons)
+	}
+	if len(bot.sent) != 0 {
+		t.Errorf("plain SendText must not be called when Buttons is set: %q", bot.sent)
 	}
 }

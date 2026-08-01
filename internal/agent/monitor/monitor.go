@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/agent/billtruth"
+	"github.com/ananthakumaran/paisa/internal/agent/telegram"
 )
 
 type Urgency int
@@ -28,6 +29,7 @@ type Insight struct {
 	Urgency Urgency
 	Title   string
 	Body    string
+	Buttons [][]telegram.Button // nil for plain-text insights
 }
 
 type Monitor interface {

@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ananthakumaran/paisa/internal/agent/telegram"
 	log "github.com/sirupsen/logrus"
 )
 
 // TextSender is the slice of telegram.Bot the notifier needs.
 type TextSender interface {
 	SendText(text string) error
+	SendTextWithButtons(text string, buttons [][]telegram.Button) (int, error)
 }
 
 // Notifier routes insights: Immediate → Telegram now; Digest → queued until
@@ -30,7 +32,13 @@ func (n *Notifier) Deliver(monitorName string, insights []Insight) {
 		}
 		switch in.Urgency {
 		case Immediate:
-			if err := n.bot.SendText(render(in)); err != nil {
+			var err error
+			if in.Buttons != nil {
+				_, err = n.bot.SendTextWithButtons(render(in), in.Buttons)
+			} else {
+				err = n.bot.SendText(render(in))
+			}
+			if err != nil {
 				log.Warnf("monitor %s: send %s: %v", monitorName, in.Key, err)
 				continue // not marked sent → retried next run
 			}
