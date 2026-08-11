@@ -86,6 +86,78 @@ func TestExtractAxisChecking(t *testing.T) {
 		assert.Equal(t, "378.78", a)
 		assert.True(t, debit)
 	})
+	// Format C — email notices: verb precedes the amount, counterparty follows "by".
+	t.Run("format_c_credited_with_by_party", func(t *testing.T) {
+		cases := []struct {
+			sms      string
+			merchant string
+			date     string
+			amt      string
+		}{
+			{
+				"We wish to inform you that your A/c no. XX6386 has been credited with INR 10.00 on 10-08-2026 at 14:46:40 IST by ACH-CR-WIPRO LIMITED-NACH-.",
+				"ACH-CR-WIPRO LIMITED-NACH-", "10-08-2026", "10.00",
+			},
+			{
+				"We wish to inform you that your A/c no. XX6386 has been credited with INR 1.00 on 10-08-2026 at 14:38:37 IST by ACH-CR-ITCHOTELSLTD-NACH-3.",
+				"ACH-CR-ITCHOTELSLTD-NACH-3", "10-08-2026", "1.00",
+			},
+			{
+				"We wish to inform you that your A/c no. XX6386 has been credited with INR 6.00 on 11-08-2026 at 09:03:18 IST by MAX HEALTHCARE /.",
+				"MAX HEALTHCARE /", "11-08-2026", "6.00",
+			},
+		}
+		for _, c := range cases {
+			m, d, a, debit, err := parser.ExtractAxisChecking(c.sms)
+			assert.NoError(t, err)
+			assert.Equal(t, c.merchant, m)
+			assert.Equal(t, c.date, d)
+			assert.Equal(t, c.amt, a)
+			assert.False(t, debit)
+		}
+	})
+	t.Run("format_c_debited_with", func(t *testing.T) {
+		sms := "We wish to inform you that your A/c no. XX6386 has been debited with INR 1,250.50 on 09-08-2026 at 10:12:00 IST by ACH-DR-BD-MF Utilities."
+		m, d, a, debit, err := parser.ExtractAxisChecking(sms)
+		assert.NoError(t, err)
+		assert.Equal(t, "ACH-DR-BD-MF Utilities", m)
+		assert.Equal(t, "09-08-2026", d)
+		assert.Equal(t, "1,250.50", a)
+		assert.True(t, debit)
+	})
+	// Format D — labelled email block, values on the line after each label.
+	t.Run("format_d_labelled_block", func(t *testing.T) {
+		cases := []struct {
+			sms      string
+			merchant string
+			date     string
+			amt      string
+		}{
+			{
+				"    \nAmount Debited:\nINR 250.00\n    \nAccount Number:\nXX6386\n    \nDate & Time:\n10-08-26, 08:58:34 IST\n    \nTransaction Info:\nUPI/P2A/085838940420/DHARMAVARAPU GANESH",
+				"DHARMAVARAPU GANESH", "10-08-26", "250.00",
+			},
+			{
+				"    \nAmount Debited:\nINR 10.00\n    \nAccount Number:\nXX6386\n    \nDate & Time:\n09-08-26, 19:22:28 IST\n    \nTransaction Info:\nUPI/P2M/622155323152/MANJULA N",
+				"MANJULA N", "09-08-26", "10.00",
+			},
+		}
+		for _, c := range cases {
+			m, d, a, debit, err := parser.ExtractAxisChecking(c.sms)
+			assert.NoError(t, err)
+			assert.Equal(t, c.merchant, m)
+			assert.Equal(t, c.date, d)
+			assert.Equal(t, c.amt, a)
+			assert.True(t, debit)
+		}
+	})
+	t.Run("format_d_credited", func(t *testing.T) {
+		sms := "Amount Credited:\nINR 500.00\n\nAccount Number:\nXX6386\n\nDate & Time:\n09-08-26, 19:22:28 IST\n\nTransaction Info:\nUPI/P2A/622155323152/SOMEONE ELSE"
+		_, _, a, debit, err := parser.ExtractAxisChecking(sms)
+		assert.NoError(t, err)
+		assert.Equal(t, "500.00", a)
+		assert.False(t, debit)
+	})
 }
 
 func TestExtractAxisUPI(t *testing.T) {

@@ -67,6 +67,15 @@ var axisChkDateRe = regexp.MustCompile(`\b(\d{2}-\d{2}-(?:\d{4}|\d{2}))\b`)
 var axisChkUPIRe = regexp.MustCompile(`(?i)(UPI/[^\n]+)`)
 var axisChkOnMerchantRe = regexp.MustCompile(`(?i)\bon\s+(.+?)\s{2,}\d{2}-\d{2}-\d{4}\b`)
 
+// Email notice variants (Axis sends these to Gmail, not as SMS):
+// Format C — "... has been credited with INR 10.00 on 10-08-2026 at 14:46:40 IST by ACH-CR-WIPRO LIMITED-NACH-."
+// Format D — labelled block, each value on the line after its label:
+//
+//	Amount Debited:\nINR 250.00\n...\nTransaction Info:\nUPI/P2A/085838940420/DHARMAVARAPU GANESH
+var axisChkAmtReC = regexp.MustCompile(`(?i)\b(debited|credited)\s+with\s+(?:INR|Rs\.?)\s*([\d,]+(?:\.\d{1,2})?)`)
+var axisChkByPartyRe = regexp.MustCompile(`(?i)\bby\s+([^\n.]+)`)
+var axisChkAmtReD = regexp.MustCompile(`(?i)\bAmount\s+(Debited|Credited):\s*(?:INR|Rs\.?)\s*([\d,]+(?:\.\d{1,2})?)`)
+
 func ExtractAxisChecking(sms string) (merchant, rawDate, rawAmt string, isDebit bool, err error) {
 	// Format A: "INR X debited/credited\nA/c no. XX...\nDD-MM-YY, HH:MM:SS\nUPI/P2M/.../Merchant"
 	// or the single-line "... debited from A/c no. XX... on <merchant>  DD-MM-YYYY ..." form.
@@ -113,7 +122,42 @@ func ExtractAxisChecking(sms string) (merchant, rawDate, rawAmt string, isDebit 
 		return merchantStr, rawDate, amtM[2], debit, nil
 	}
 
-	log.Debugf("axis_checking: no match — format A expects 'INR <amt> debited/credited', format B expects 'Debit/Credit INR <amt>'")
+	// Format C: verb precedes the amount; counterparty follows a trailing "by".
+	if amtM := axisChkAmtReC.FindStringSubmatch(sms); amtM != nil {
+		dateM := axisChkDateRe.FindStringSubmatch(sms)
+		if dateM == nil {
+			log.Debugf("axis_checking: format C no date found — rawAmt=%q", amtM[2])
+			return "", "", "", false, fmt.Errorf("axis_checking: no date in format C")
+		}
+		merchantStr := ""
+		if byM := axisChkByPartyRe.FindStringSubmatch(sms); byM != nil {
+			merchantStr = strings.TrimSpace(byM[1])
+			log.Debugf("axis_checking: 'by <party>' match → merchant=%q", merchantStr)
+		}
+		debit := strings.EqualFold(amtM[1], "debited")
+		log.Debugf("axis_checking/C: rawAmt=%q rawDate=%q isDebit=%v merchant=%q", amtM[2], dateM[1], debit, merchantStr)
+		return merchantStr, dateM[1], amtM[2], debit, nil
+	}
+
+	// Format D: labelled email block. Date and UPI reference are found by the
+	// shared patterns; only the amount label is specific to this layout.
+	if amtM := axisChkAmtReD.FindStringSubmatch(sms); amtM != nil {
+		dateM := axisChkDateRe.FindStringSubmatch(sms)
+		if dateM == nil {
+			log.Debugf("axis_checking: format D no date found — rawAmt=%q", amtM[2])
+			return "", "", "", false, fmt.Errorf("axis_checking: no date in format D")
+		}
+		merchantStr := ""
+		if upiM := axisChkUPIRe.FindStringSubmatch(sms); upiM != nil {
+			merchantStr = extractUPIMerchant(strings.TrimSpace(upiM[1]))
+			log.Debugf("axis_checking: UPI ref=%q → merchant=%q", upiM[1], merchantStr)
+		}
+		debit := strings.EqualFold(amtM[1], "Debited")
+		log.Debugf("axis_checking/D: rawAmt=%q rawDate=%q isDebit=%v merchant=%q", amtM[2], dateM[1], debit, merchantStr)
+		return merchantStr, dateM[1], amtM[2], debit, nil
+	}
+
+	log.Debugf("axis_checking: no match — format A expects 'INR <amt> debited/credited', B 'Debit/Credit INR <amt>', C '<verb> with INR <amt>', D 'Amount Debited/Credited:'")
 	return "", "", "", false, fmt.Errorf("axis_checking: no match")
 }
 
